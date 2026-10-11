@@ -105,6 +105,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="extraction pipeline (default: ir)",
     )
     p.add_argument("--json", action="store_true", help="print a JSON summary")
+    p.add_argument(
+        "--dry-run", action="store_true",
+        help="show the output files that would be created, without extracting",
+    )
     p.add_argument("-q", "--quiet", action="store_true", help="suppress progress")
     p.add_argument("-v", "--verbose", action="store_true", help="verbose output")
     p.add_argument(
@@ -162,6 +166,33 @@ def _print_summary(args, pages, ocr_lang, result_path, results, errors, elapsed)
         print(f"    ! page {p + 1}: {err}")
 
 
+def _print_dry_run(args, pages, out_path, out_folder, stem):
+    """Simulate a run: print the files that would be created (no extraction)."""
+    units = export_core.output_units(args.content)
+    print("noesis-pdf-engine — dry run (nessuna estrazione)")
+    print(f"  input    : {Path(args.pdf).resolve()}")
+    print(f"  pages    : {format_pages_label(pages)}  ({len(pages)})")
+    print(f"  content  : {args.content}")
+    print(f"  format   : {args.format}")
+    if args.format == "merged":
+        base = Path(out_path)
+        for suffix, sub in units:
+            path = base.with_name(base.stem + suffix + base.suffix)
+            print(f"  file     : {path}   [{sub}]")
+    elif args.format == "zip":
+        print(f"  archivio : {out_path}")
+        for page in pages:
+            for suffix, sub in units:
+                print(f"    - {export_core.page_filename(stem, page, suffix)}"
+                      f"   [{sub}]")
+    else:
+        print(f"  cartella : {out_folder}")
+        for page in pages:
+            for suffix, sub in units:
+                print(f"    - {export_core.page_filename(stem, page, suffix)}"
+                      f"   [{sub}]")
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
@@ -198,6 +229,10 @@ def main(argv: list[str] | None = None) -> int:
         None if args.src == "auto" else args.src)
 
     out_path, out_folder, name = _resolve_outputs(args, pdf.stem)
+
+    if args.dry_run:
+        _print_dry_run(args, pages, out_path, out_folder, pdf.stem)
+        return 0
 
     if args.verbose and not args.quiet:
         print(f"pages: {describe_pages(pages)}  ocr-lang: {ocr_lang}",

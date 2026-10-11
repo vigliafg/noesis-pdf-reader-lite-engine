@@ -9,6 +9,17 @@ then write merged / zip / per-page folder.
 
 This module reproduces that logic so the CLI output is byte-identical to the
 desktop export for the same engine options.
+
+Naming rules (desktop parity):
+
+* ``original``   → one file per page, ``{stem}_pag{NNNN}.md``;
+* ``translated`` → one file per page, ``{stem}_pag{NNNN}-translated.md``;
+* ``both``       → **two** files per page (original + translation).
+
+In the ``merged`` format the single output file carries the same
+``-translated`` suffix (``both`` emits two merged files). Zip archives and
+per-page folders keep the user-chosen container name; only the content files
+get the suffix.
 """
 from __future__ import annotations
 
@@ -25,6 +36,23 @@ _MD_IMAGE_RE = re.compile(r"!\[[^\]]*\]\([^)]*\)")
 def strip_images(text: str) -> str:
     """Remove Markdown image embeds when figures are excluded."""
     return _MD_IMAGE_RE.sub("", text)
+
+
+def output_units(content: str) -> list[tuple[str, str]]:
+    """Return the ``(filename suffix, content key)`` pairs to emit.
+
+    Mirrors the desktop ``_batch_output_units``.
+    """
+    if content == "original":
+        return [("", "original")]
+    if content == "translated":
+        return [("-translated", "translated")]
+    return [("", "original"), ("-translated", "translated")]
+
+
+def page_filename(stem: str, page: int, suffix: str) -> str:
+    """Per-page file name: ``{stem}_pag{NNNN}{suffix}.md`` (1-based page)."""
+    return f"{stem}_pag{page + 1:04d}{suffix}.md"
 
 
 def page_content(entry: dict, content: str, include_images: bool) -> str:
@@ -93,29 +121,48 @@ def extract_and_translate(
     return results, errors
 
 
+def planned_outputs(pages, *, content, fmt, out_path, out_folder, stem):
+    """Return the list of paths a run would create (for ``--dry-run``)."""
+    units = output_units(content)
+    if fmt == "merged":
+        base = Path(out_path)
+        return [base.with_name(base.stem + suffix + base.suffix)
+                for suffix, _sub in units]
+    names = [page_filename(stem, p, suffix)
+             for p in pages for suffix, _sub in units]
+    if fmt == "zip":
+        return [Path(out_path)]  # archive; entries listed separately
+    return [Path(out_folder) / n for n in names]
+
+
 def write_output(
     results, pages, *, content, include_images, fmt, out_path, out_folder, stem
 ):
     """Write the batch output; return the created path.
 
-    Mirrors ``MainWindow._write_batch_output`` exactly: merged uses
-    ``<!-- pagina N -->`` blocks joined by ``---``; zip/folder use
-    ``{stem}_pag{NNNN}.md`` names.
+    Mirrors ``MainWindow._write_batch_output`` exactly, including the
+    ``-translated`` suffix and the ``both`` split.
     """
+    units = output_units(content)
     if fmt == "merged":
-        chunks = []
-        for p in pages:
-            body = page_content(results.get(p, {}), content, include_images)
-            chunks.append(f"<!-- pagina {p + 1} -->\n\n{body}")
-        text = "\n\n---\n\n".join(chunks)
-        out_path = Path(out_path)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(text, encoding="utf-8")
-        return out_path
+        created: Path | None = None
+        for suffix, sub in units:
+            chunks = []
+            for p in pages:
+                body = page_content(results.get(p, {}), sub, include_images)
+                chunks.append(f"<!-- pagina {p + 1} -->\n\n{body}")
+            text = "\n\n---\n\n".join(chunks)
+            base = Path(out_path)
+            path = base.with_name(base.stem + suffix + base.suffix)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+            created = path
+        return created if created is not None else Path(out_path)
     files: dict[str, str] = {}
     for p in pages:
-        body = page_content(results.get(p, {}), content, include_images)
-        files[f"{stem}_pag{p + 1:04d}.md"] = body
+        for suffix, sub in units:
+            body = page_content(results.get(p, {}), sub, include_images)
+            files[page_filename(stem, p, suffix)] = body
     if fmt == "zip":
         out_path = Path(out_path)
         out_path.parent.mkdir(parents=True, exist_ok=True)

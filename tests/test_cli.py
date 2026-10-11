@@ -155,6 +155,18 @@ class CliTests(unittest.TestCase):
         self.assertEqual(data["ok"], 0)
         self.assertIn("1", data["errors"])
 
+    def test_dry_run_lists_translated_files(self):
+        rc, stdout, _err = self._run([
+            str(self.pdf), "--pages", "1-2", "--content", "both",
+            "--format", "folder", "--out", str(self.dir / "out"),
+            "--dry-run",
+        ])
+        self.assertEqual(rc, 0)
+        self.assertIn("sample_pag0001.md", stdout)
+        self.assertIn("sample_pag0001-translated.md", stdout)
+        self.assertIn("sample_pag0002-translated.md", stdout)
+        self.assertFalse((self.dir / "out").exists())  # nessuna estrazione
+
     # ── console entrypoint ─────────────────────────────────────────────
 
     def test_console_entrypoint_subprocess(self):

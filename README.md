@@ -218,6 +218,7 @@ noesis-pdf-engine libro.pdf --pages 1-5 --json -o out.md
 | `--tessdata DIR` | percorso | — | Cartella `tessdata` per l'OCR (imposta `TESSDATA_PREFIX`). |
 | `--pipeline` | `ir` · `current` | `ir` | Pipeline di estrazione (`current` è la classica/di confronto). |
 | `--json` | flag | off | Stampa un riepilogo JSON su stdout. |
+| `--dry-run` | flag | off | **Simulazione**: mostra i file che verrebbero creati, senza estrarre né tradurre. |
 | `-q`, `--quiet` | flag | off | Nessun progresso. |
 | `-v`, `--verbose` | flag | off | Output più dettagliato. |
 | `--version` | flag | — | Stampa la versione. |
@@ -228,6 +229,17 @@ noesis-pdf-engine libro.pdf --pages 1-5 --json -o out.md
 ---
 
 ## Formati di output
+
+Il **nome dei file di contenuto** segue una regola precisa: i file tradotti
+portano il suffisso **`-translated`**.
+
+| `--content` | File per pagina |
+|---|---|
+| `original` | `{nome-pdf}_pagNNNN.md` |
+| `translated` | `{nome-pdf}_pagNNNN-translated.md` |
+| `both` | **due** file per pagina: `{nome-pdf}_pagNNNN.md` **+** `{nome-pdf}_pagNNNN-translated.md` |
+
+`NNNN` è il numero di pagina **1-based** su 4 cifre (es. `harrison2025_pag0007-translated.md`).
 
 ### `merged` (default) — un unico Markdown
 
@@ -249,13 +261,17 @@ Il testo della prima pagina, con l'ordine di lettura ricostruito.
 Il testo della seconda pagina.
 ```
 
-Il file è nominato `<name>.md` (default: il nome del PDF).
+Il file è `<name>.md`; con `--content translated` diventa
+`<name>-translated.md` (anche se hai scelto un `--name` esplicito). Con
+`--content both` si producono **due** file: `<name>.md` (originale) e
+`<name>-translated.md` (traduzione).
 
 ### `zip` — un file per pagina, dentro uno ZIP
 
 ```bash
 noesis-pdf-engine tesi.pdf --format zip -o tesi.zip
 # tesi.zip contiene: tesi_pag0001.md, tesi_pag0002.md, …
+# con --content translated: tesi_pag0001-translated.md, …
 ```
 
 ### `folder` — un file per pagina, in una cartella
@@ -265,13 +281,37 @@ noesis-pdf-engine tesi.pdf --format folder --out pagine/
 # pagine/tesi_pag0001.md, pagine/tesi_pag0002.md, …
 ```
 
-> In `zip` e `folder` i file interni si chiamano sempre
-> `<nome-pdf>_pagNNNN.md`; `--name` cambia solo il nome del contenitore
-> (file `.zip` o cartella).
+> L'archivio ZIP e la cartella mantengono il **nome scelto** (`--name`): il
+> suffisso `-translated` è solo sui **file di contenuto**. I file interni si
+> chiamano sempre `<nome-pdf>_pagNNNN[-translated].md`.
 
 **Dettaglio importante:** in ogni corpo il *header di estrazione* viene rimosso
 (come nell'export dell'app desktop), quindi il Markdown esportato è "pulito".
 Con `--no-images` i riferimenti immagine Markdown vengono eliminati.
+
+### Simulare prima di esportare
+
+Con `--dry-run` vedi **esattamente** quali file verrebbero creati, senza
+estrarre né tradurre (nessuna rete):
+
+```bash
+noesis-pdf-engine libro.pdf --pages 1-3 --content both --format folder --dry-run
+```
+
+```text
+noesis-pdf-engine — dry run (nessuna estrazione)
+  input    : /percorso/libro.pdf
+  pages    : 1-3  (3)
+  content  : both
+  format   : folder
+  cartella : /percorso/out
+    - libro_pag0001.md   [original]
+    - libro_pag0001-translated.md   [translated]
+    - libro_pag0002.md   [original]
+    - libro_pag0002-translated.md   [translated]
+    - libro_pag0003.md   [original]
+    - libro_pag0003-translated.md   [translated]
+```
 
 ---
 
@@ -350,7 +390,7 @@ brew install tesseract tesseract-lang
 | Cattura oggetti / reader / tema | sì | no |
 | Cache di traduzione su disco | sì | no |
 | Opzioni di esportazione | selezione pagine, contenuto, lingue/motore, traduci-mancanti, figure, merged/zip/cartella | **le stesse** |
-| Composizione dell'output | header rimosso, `<!-- pagina N -->`, `---`, nomi `*_pagNNNN.md` | **identica** |
+| Composizione dell'output | header rimosso, `<!-- pagina N -->`, `---`, nomi `*_pagNNNN[-translated].md`, split di `both` | **identica** |
 
 ---
 
