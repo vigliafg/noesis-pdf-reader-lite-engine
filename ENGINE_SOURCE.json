@@ -1,7 +1,7 @@
 {
   "desktop_repo": "/home/vigliafg/Documenti/GitHub/noesis-pdf-reader-lite",
-  "desktop_commit": "d6493e2198fdd4d1c9fe52ccc10874f9704baf19",
-  "synced_at": "2026-10-11T08:35:21+00:00",
+  "desktop_commit": "1c0987f644421f7d2f9dde5669e8dfc6e2b9a927",
+  "synced_at": "2026-10-11T10:14:35+00:00",
   "verbatim": [
     "ir_layout.py",
     "layout_engine.py",
