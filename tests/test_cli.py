@@ -101,6 +101,16 @@ class CliTests(unittest.TestCase):
         self.assertEqual(data["errors"], {})
         self.assertEqual(data["content"], "original")
 
+    def test_default_content_is_original(self):
+        # Headless default is extraction only (no network); the GUI starts from
+        # "translated". Overridable with --content.
+        rc, stdout, _err = self._run([
+            str(self.pdf), "--pages", "1", "--json",
+            "-o", str(self.dir / "default.md"), "--quiet",
+        ])
+        self.assertEqual(rc, 0)
+        self.assertEqual(json.loads(stdout)["content"], "original")
+
     def test_no_images_flag(self):
         out = self.dir / "noimg.md"
         rc, _stdout, _err = self._run([

@@ -55,8 +55,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--content", choices=["original", "translated", "both"],
-        default="translated",
-        help="what to export (default: translated)",
+        default="original",
+        help="what to export (default: original)",
     )
     p.add_argument(
         "--engine", choices=list(TRANSLATION_ENGINES), default="google",
