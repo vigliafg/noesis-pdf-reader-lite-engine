@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "noesis-pdf-reader-lite-engine"
+version = "0.1.0"
+description = "Headless CLI for the Noesis PDF Reader Lite adaptive layout engine: extract and translate PDF pages to Markdown."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "vigliafg" }]
+keywords = ["pdf", "markdown", "layout", "extraction", "translation", "cli"]
+dependencies = [
+    "pymupdf>=1.24",
+    "pymupdf4llm>=0.0.9",
+]
+
+[project.optional-dependencies]
+test = ["markdown>=3.5"]
+
+[project.scripts]
+noesis-pdf-engine = "cli:main"
+
+# The engine modules are flat top-level modules on purpose: ir_layout.py does a
+# lazy `import main` for a few pure helpers, so the headless core must stay
+# importable under the name `main`.
+[tool.setuptools]
+py-modules = [
+    "cli",
+    "main",
+    "export_core",
+    "ir_layout",
+    "layout_engine",
+    "page_model",
+    "layout_proxies",
+    "pages",
+    "i18n",
+    "theme",
+]

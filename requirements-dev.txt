@@ -1,0 +1,2 @@
+# Test-only dependencies (the runtime CLI needs none of these).
+markdown>=3.5

@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+
+# Local test PDFs / outputs (regenerable)
+*.pdf
+work/
+logs/
+out/
