@@ -67,6 +67,7 @@ from __future__ import annotations
 import base64
 import concurrent.futures
 import hashlib
+import html
 import json
 import math
 import os
@@ -74,6 +75,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.parse
 import urllib.request
@@ -112,6 +114,11 @@ try:
 except ImportError:
     pymupdf = None  # type: ignore
     _has_pymupdf = False
+
+try:
+    import markdown as _md_lib
+except ImportError:
+    _md_lib = None  # type: ignore
 
 # Markdown extensions (kept for API parity with the desktop module).
 _MD_EXTENSIONS = ["tables", "fenced_code", "codehilite"]

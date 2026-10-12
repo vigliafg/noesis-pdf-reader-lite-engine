@@ -1,14 +1,15 @@
 """Export composition for the CLI — mirrors the desktop batch export.
 
-The desktop composes the batch output inside ``MainWindow`` methods
-(``_write_batch_output`` / ``_batch_page_content`` / ``_batch_strip_images``).
-A CLI has no saved text edits, so the edit-cache lookup reduces to the
-identity and the composition is: strip the extraction header, join the
-original and/or the translation, optionally drop the Markdown image embeds,
-then write merged / zip / per-page folder.
+The desktop composes the batch output inside ``MainWindow._write_batch_output``,
+which now delegates to the shared, pure ``main.write_export``. This module does
+the same, so the CLI output is byte-identical to the desktop export for the same
+engine options: strip the extraction header, join the original and/or the
+translation, optionally drop the Markdown image embeds, convert to the chosen
+content format, then write merged / zip / per-page folder / vault.
 
-This module reproduces that logic so the CLI output is byte-identical to the
-desktop export for the same engine options.
+Content formats (``content_fmt``): ``markdown`` (identity), ``html``, ``text``,
+``epub`` (native, merged only), and the pandoc writers ``docx``/``odt``/``rtf``/
+``latex``. Packagings (``fmt``): ``merged``, ``zip``, ``folder``, ``vault``.
 
 Naming rules (desktop parity):
 
@@ -16,16 +17,14 @@ Naming rules (desktop parity):
 * ``translated`` → one file per page, ``{stem}_pag{NNNN}-translated.md``;
 * ``both``       → **two** files per page (original + translation).
 
-In the ``merged`` format the single output file carries the same
-``-translated`` suffix (``both`` emits two merged files). Zip archives and
-per-page folders keep the user-chosen container name; only the content files
-get the suffix.
+The extension follows the content format (``.md``/``.html``/``.txt``/…). In the
+``merged`` format the single output file carries the same ``-translated`` suffix
+(``both`` emits two merged files). Zip archives and per-page folders keep the
+user-chosen container name; only the content files get the suffix.
 """
 from __future__ import annotations
 
 import re
-import zipfile
-from pathlib import Path
 
 import main
 
@@ -50,9 +49,9 @@ def output_units(content: str) -> list[tuple[str, str]]:
     return [("", "original"), ("-translated", "translated")]
 
 
-def page_filename(stem: str, page: int, suffix: str) -> str:
-    """Per-page file name: ``{stem}_pag{NNNN}{suffix}.md`` (1-based page)."""
-    return f"{stem}_pag{page + 1:04d}{suffix}.md"
+def page_filename(stem: str, page: int, suffix: str, ext: str = ".md") -> str:
+    """Per-page file name: ``{stem}_pag{NNNN}{suffix}{ext}`` (1-based page)."""
+    return f"{stem}_pag{page + 1:04d}{suffix}{ext}"
 
 
 def page_content(entry: dict, content: str, include_images: bool) -> str:
@@ -121,57 +120,31 @@ def extract_and_translate(
     return results, errors
 
 
-def planned_outputs(pages, *, content, fmt, out_path, out_folder, stem):
+def planned_outputs(pages, *, content, fmt, out_path, out_folder, stem,
+                    content_fmt="markdown"):
     """Return the list of paths a run would create (for ``--dry-run``)."""
     units = output_units(content)
-    if fmt == "merged":
-        base = Path(out_path)
-        return [base.with_name(base.stem + suffix + base.suffix)
-                for suffix, _sub in units]
-    names = [page_filename(stem, p, suffix)
-             for p in pages for suffix, _sub in units]
-    if fmt == "zip":
-        return [Path(out_path)]  # archive; entries listed separately
-    return [Path(out_folder) / n for n in names]
+    return main.planned_export_paths(
+        list(pages), units, fmt, content_fmt, out_path, out_folder, stem)
 
 
 def write_output(
-    results, pages, *, content, include_images, fmt, out_path, out_folder, stem
+    results, pages, *, content, include_images, fmt, out_path, out_folder, stem,
+    content_fmt="markdown", pandoc=None, lang="",
 ):
     """Write the batch output; return the created path.
 
-    Mirrors ``MainWindow._write_batch_output`` exactly, including the
-    ``-translated`` suffix and the ``both`` split.
+    Delegates to the shared ``main.write_export`` so the CLI stays byte-identical
+    to the desktop export (including the ``-translated`` suffix, the ``both``
+    split and the content-format conversion).
+
+    ``fmt`` is the packaging (``merged``/``zip``/``folder``/``vault``);
+    ``content_fmt`` the content format (markdown/html/text/epub/docx/…).
     """
     units = output_units(content)
-    if fmt == "merged":
-        created: Path | None = None
-        for suffix, sub in units:
-            chunks = []
-            for p in pages:
-                body = page_content(results.get(p, {}), sub, include_images)
-                chunks.append(f"<!-- pagina {p + 1} -->\n\n{body}")
-            text = "\n\n---\n\n".join(chunks)
-            base = Path(out_path)
-            path = base.with_name(base.stem + suffix + base.suffix)
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(text, encoding="utf-8")
-            created = path
-        return created if created is not None else Path(out_path)
-    files: dict[str, str] = {}
-    for p in pages:
-        for suffix, sub in units:
-            body = page_content(results.get(p, {}), sub, include_images)
-            files[page_filename(stem, p, suffix)] = body
-    if fmt == "zip":
-        out_path = Path(out_path)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zf:
-            for name, body in files.items():
-                zf.writestr(name, body)
-        return out_path
-    out_folder = Path(out_folder)
-    out_folder.mkdir(parents=True, exist_ok=True)
-    for name, body in files.items():
-        (out_folder / name).write_text(body, encoding="utf-8")
-    return out_folder
+    return main.write_export(
+        results, list(pages), units=units,
+        body_for=lambda entry, sub: page_content(entry, sub, include_images),
+        packaging=fmt, content_fmt=content_fmt,
+        out_path=out_path, out_folder=out_folder, stem=stem,
+        pandoc=pandoc, lang=lang, title=stem)

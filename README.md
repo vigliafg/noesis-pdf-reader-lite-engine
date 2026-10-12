@@ -6,8 +6,10 @@ estrae le pagine di un PDF in **Markdown** con lo stesso *engine adattativo*
 dell'app desktop (ricostruzione dell'ordine di lettura, tabelle, figure,
 header/footer, titoli…) e, se vuoi, le **traduce**. Espone le **stesse opzioni
 di esportazione** della procedura guidata dell'app: selezione pagine, contenuto
-(originale / traduzione / entrambi), motore e lingue di traduzione, figure, e i
-formati *Markdown unico* / *ZIP* / *cartella di pagine*.
+(originale / traduzione / entrambi), motore e lingue di traduzione, figure,
+**formato del contenuto** (`markdown` / `html` / `text` / `epub` / `docx` /
+`odt` / `rtf` / `latex`) e **impacchettamento** (*Markdown unico* / *ZIP* /
+*cartella di pagine* / *vault con indice*).
 
 Nessuna interfaccia grafica, nessuna dipendenza da Qt: solo il motore,
 il traduttore e l'esportatore.
@@ -211,8 +213,10 @@ noesis-pdf-engine libro.pdf --pages 1-5 --json -o out.md
 | `--dst LANG` | codice lingua | `it` | Lingua di destinazione. |
 | `--translate-missing` / `--no-translate-missing` | flag | attivo | Traduce le pagine senza traduzione in cache. |
 | `--images` / `--no-images` | flag | attivo | Mantiene (o rimuove) le immagini incorporate nel Markdown. |
-| `--format` | `merged` · `zip` · `folder` | `merged` | Formato di output. |
-| `-o`, `--out PATH` | percorso | cartella corrente | File (merged/zip) o cartella (folder). |
+| `--format` | `merged` · `zip` · `folder` · `vault` | `merged` | Impacchettamento dell'output. |
+| `--content-format` | `markdown` · `html` · `text` · `epub` · `docx` · `odt` · `rtf` · `latex` | `markdown` | Formato del contenuto (conversione del Markdown). |
+| `--pandoc PATH` | percorso | `$PATH` | Eseguibile pandoc per `docx`/`odt`/`rtf`/`latex`. |
+| `-o`, `--out PATH` | percorso | cartella corrente | File (merged/zip) o cartella (folder/vault). |
 | `--name NAME` | nome | nome del PDF | Nome del contenitore di output. |
 | `--ocr-lang LANG` | es. `eng+ita` | derivato da `--src` | Lingua/e Tesseract per l'OCR. |
 | `--tessdata DIR` | percorso | — | Cartella `tessdata` per l'OCR (imposta `TESSDATA_PREFIX`). |
@@ -281,9 +285,42 @@ noesis-pdf-engine tesi.pdf --format folder --out pagine/
 # pagine/tesi_pag0001.md, pagine/tesi_pag0002.md, …
 ```
 
+### `vault` — cartella con indice e front-matter
+
+Come `folder`, ma aggiunge un **`index.md`** (TOC con i link alle pagine) e, per
+il formato Markdown, un **front-matter YAML** in ogni pagina (compatibile
+Obsidian/LogSeq):
+
+```bash
+noesis-pdf-engine tesi.pdf --format vault --out tesi/
+# tesi/index.md, tesi/tesi_pag0001.md, tesi/tesi_pag0002.md, …
+```
+
+### Formato del contenuto (`--content-format`)
+
+Il Markdown estratto può essere convertito al volo:
+
+| `--content-format` | Estensione | Motore |
+|---|---|---|
+| `markdown` (default) | `.md` | — (identità) |
+| `html` | `.html` | HTML autonomo (figure in base64) |
+| `text` | `.txt` | testo semplice (markdown rimosso) |
+| `epub` | `.epub` | EPUB 3 nativo (solo `merged`) |
+| `docx` · `odt` · `rtf` · `latex` | `.docx` · `.odt` · `.rtf` · `.tex` | **pandoc** (richiesto) |
+
+```bash
+noesis-pdf-engine libro.pdf --content-format html -o libro.html
+noesis-pdf-engine libro.pdf --content-format epub -o libro.epub
+noesis-pdf-engine libro.pdf --content-format docx -o libro.docx   # richiede pandoc
+```
+
+> Le combinazioni valide: `epub` solo con `--format merged`; i formati pandoc
+> (`docx`/`odt`/`rtf`/`latex`) con `merged`/`zip`/`folder`; `markdown`/`html`/
+> `text` con tutti. Una combinazione non valida esce con codice `2`.
+
 > L'archivio ZIP e la cartella mantengono il **nome scelto** (`--name`): il
 > suffisso `-translated` è solo sui **file di contenuto**. I file interni si
-> chiamano sempre `<nome-pdf>_pagNNNN[-translated].md`.
+> chiamano sempre `<nome-pdf>_pagNNNN[-translated].<ext>`.
 
 **Dettaglio importante:** in ogni corpo il *header di estrazione* viene rimosso
 (come nell'export dell'app desktop), quindi il Markdown esportato è "pulito".

@@ -4,8 +4,9 @@
 Extracts PDF pages to Markdown with the same adaptive layout engine as the
 desktop app and exposes the *same export options* as its batch-export wizard:
 page selection, content (original / translated / both), translation engine and
-languages, translate-missing, image embeds, and the merged / zip / per-page
-folder formats.
+languages, translate-missing, image embeds, the **content format** (markdown /
+html / text / epub / docx / odt / rtf / latex) and the **packaging** (merged /
+zip / per-page folder / vault with index).
 
 Examples::
 
@@ -13,6 +14,10 @@ Examples::
     noesis-pdf-engine book.pdf --pages 3,5,10-12 --content both --dst en
     noesis-pdf-engine scan.pdf --content original --ocr-lang eng+ita
     noesis-pdf-engine book.pdf --format folder --out out/ --name capitolo
+    noesis-pdf-engine book.pdf --content-format html -o book.html
+    noesis-pdf-engine book.pdf --content-format epub -o book.epub
+    noesis-pdf-engine book.pdf --format vault --out vault/
+    noesis-pdf-engine book.pdf --content-format docx -o book.docx  # richiede pandoc
 """
 from __future__ import annotations
 
@@ -81,8 +86,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="keep Markdown image embeds (default: on)",
     )
     p.add_argument(
-        "--format", choices=["merged", "zip", "folder"], default="merged",
-        help="output format (default: merged)",
+        "--format", dest="format", choices=list(engine._PACKAGING_ORDER),
+        default="merged",
+        help="packaging: merged | zip | folder | vault (default: merged)",
+    )
+    p.add_argument(
+        "--content-format", dest="content_format",
+        choices=list(engine._CONTENT_FORMAT_ORDER), default="markdown",
+        help="content format: markdown | html | text | epub | docx | odt | "
+             "rtf | latex (default: markdown)",
+    )
+    p.add_argument(
+        "--pandoc", default=None, metavar="PATH",
+        help="pandoc executable for docx/odt/rtf/latex (default: $PATH)",
     )
     p.add_argument(
         "-o", "--out", default=None, metavar="PATH",
@@ -120,10 +136,11 @@ def _resolve_outputs(args, stem: str):
     """Return ``(out_path, out_folder, name)`` from the CLI options."""
     name = args.name or stem
     cwd = Path.cwd()
-    if args.format == "folder":
+    if args.format in ("folder", "vault"):
         folder = Path(args.out) if args.out else (cwd / name)
         return None, folder, name
-    ext = ".zip" if args.format == "zip" else ".md"
+    ext = (".zip" if args.format == "zip"
+           else engine.content_format_ext(args.content_format))
     out = Path(args.out) if args.out else (cwd / f"{name}{ext}")
     if out.suffix.lower() != ext:
         out = out.with_suffix(ext)
@@ -138,6 +155,8 @@ def _print_summary(args, pages, ocr_lang, result_path, results, errors, elapsed)
             "pages": [p + 1 for p in pages],
             "pages_label": label,
             "content": args.content,
+            "content_format": args.content_format,
+            "packaging": args.format,
             "engine": args.engine,
             "src": args.src,
             "dst": args.dst,
@@ -169,28 +188,31 @@ def _print_summary(args, pages, ocr_lang, result_path, results, errors, elapsed)
 def _print_dry_run(args, pages, out_path, out_folder, stem):
     """Simulate a run: print the files that would be created (no extraction)."""
     units = export_core.output_units(args.content)
+    ext = engine.content_format_ext(args.content_format)
     print("noesis-pdf-engine — dry run (nessuna estrazione)")
     print(f"  input    : {Path(args.pdf).resolve()}")
     print(f"  pages    : {format_pages_label(pages)}  ({len(pages)})")
     print(f"  content  : {args.content}")
-    print(f"  format   : {args.format}")
+    print(f"  format   : {args.content_format} · {args.format}")
     if args.format == "merged":
         base = Path(out_path)
         for suffix, sub in units:
-            path = base.with_name(base.stem + suffix + base.suffix)
+            path = base.with_name(base.stem + suffix + ext)
             print(f"  file     : {path}   [{sub}]")
     elif args.format == "zip":
         print(f"  archivio : {out_path}")
         for page in pages:
             for suffix, sub in units:
-                print(f"    - {export_core.page_filename(stem, page, suffix)}"
+                print(f"    - {export_core.page_filename(stem, page, suffix, ext)}"
                       f"   [{sub}]")
     else:
         print(f"  cartella : {out_folder}")
         for page in pages:
             for suffix, sub in units:
-                print(f"    - {export_core.page_filename(stem, page, suffix)}"
+                print(f"    - {export_core.page_filename(stem, page, suffix, ext)}"
                       f"   [{sub}]")
+        if args.format == "vault":
+            print("    - index.md")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -224,6 +246,22 @@ def main(argv: list[str] | None = None) -> int:
     except PageSpecError as exc:
         print(f"error: invalid --pages: {exc}", file=sys.stderr)
         return 2
+
+    if not engine.packaging_allows(args.content_format, args.format):
+        print(
+            f"error: packaging '{args.format}' cannot carry content format "
+            f"'{args.content_format}'", file=sys.stderr)
+        return 2
+
+    pandoc = args.pandoc
+    if engine.content_format_kind(args.content_format) == "pandoc":
+        pandoc = pandoc or engine.pandoc_path()
+        if not pandoc:
+            print(
+                f"error: pandoc is required for --content-format "
+                f"{args.content_format} (install pandoc or pass --pandoc)",
+                file=sys.stderr)
+            return 2
 
     ocr_lang = args.ocr_lang or engine._tess_lang_code(
         None if args.src == "auto" else args.src)
@@ -276,6 +314,9 @@ def main(argv: list[str] | None = None) -> int:
             out_path=out_path,
             out_folder=out_folder,
             stem=pdf.stem,
+            content_fmt=args.content_format,
+            pandoc=pandoc,
+            lang=args.dst,
         )
 
     _print_summary(args, pages, ocr_lang, result_path, results, errors,

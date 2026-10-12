@@ -9,6 +9,7 @@ import contextlib
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -85,6 +86,79 @@ class CliTests(unittest.TestCase):
         ])
         self.assertEqual(rc, 0)
         self.assertTrue((self.dir / "named.md").is_file())
+
+    # ── new content formats + vault ────────────────────────────────────
+
+    def test_html_merged(self):
+        out = self.dir / "o.html"
+        rc, _stdout, _err = self._run([
+            str(self.pdf), "--pages", "all", "--content", "original",
+            "--content-format", "html", "-o", str(out), "--quiet",
+        ])
+        self.assertEqual(rc, 0)
+        text = out.read_text(encoding="utf-8")
+        self.assertIn("<!DOCTYPE html>", text)
+        self.assertIn("quick brown fox", text)
+
+    def test_text_zip(self):
+        out = self.dir / "o.zip"
+        rc, _stdout, _err = self._run([
+            str(self.pdf), "--pages", "1", "--content", "original",
+            "--content-format", "text", "--format", "zip", "-o", str(out),
+            "--quiet",
+        ])
+        self.assertEqual(rc, 0)
+        with zipfile.ZipFile(out) as zf:
+            self.assertEqual(zf.namelist(), ["sample_pag0001.txt"])
+
+    def test_epub_merged(self):
+        out = self.dir / "o.epub"
+        rc, _stdout, _err = self._run([
+            str(self.pdf), "--pages", "1-2", "--content", "original",
+            "--content-format", "epub", "-o", str(out), "--quiet",
+        ])
+        self.assertEqual(rc, 0)
+        with zipfile.ZipFile(out) as zf:
+            self.assertEqual(zf.namelist()[0], "mimetype")
+            self.assertIn("OEBPS/content.opf", zf.namelist())
+
+    def test_vault_format(self):
+        folder = self.dir / "vault"
+        rc, _stdout, _err = self._run([
+            str(self.pdf), "--pages", "1-2", "--content", "original",
+            "--format", "vault", "--out", str(folder), "--quiet",
+        ])
+        self.assertEqual(rc, 0)
+        self.assertTrue((folder / "index.md").is_file())
+        page = (folder / "sample_pag0001.md").read_text(encoding="utf-8")
+        self.assertTrue(page.startswith("---\n"))
+
+    def test_invalid_packaging_content_combo(self):
+        rc, _stdout, err = self._run([
+            str(self.pdf), "--pages", "1", "--content", "original",
+            "--content-format", "epub", "--format", "folder", "--quiet",
+        ])
+        self.assertEqual(rc, 2)
+        self.assertIn("cannot carry", err)
+
+    @unittest.skipUnless(shutil.which("pandoc"), "pandoc non installato")
+    def test_docx_merged(self):
+        out = self.dir / "o.docx"
+        rc, _stdout, _err = self._run([
+            str(self.pdf), "--pages", "1", "--content", "original",
+            "--content-format", "docx", "-o", str(out), "--quiet",
+        ])
+        self.assertEqual(rc, 0)
+        with zipfile.ZipFile(out) as zf:
+            self.assertIn("word/document.xml", zf.namelist())
+
+    def test_dry_run_html_lists_html_files(self):
+        rc, stdout, _err = self._run([
+            str(self.pdf), "--pages", "1", "--content", "original",
+            "--content-format", "html", "--dry-run",
+        ])
+        self.assertEqual(rc, 0)
+        self.assertIn(".html", stdout)
 
     # ── options ────────────────────────────────────────────────────────
 

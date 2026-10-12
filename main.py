@@ -15,6 +15,7 @@ from __future__ import annotations
 import base64
 import concurrent.futures
 import hashlib
+import html
 import json
 import math
 import os
@@ -22,6 +23,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.parse
 import urllib.request
@@ -60,6 +62,11 @@ try:
 except ImportError:
     pymupdf = None  # type: ignore
     _has_pymupdf = False
+
+try:
+    import markdown as _md_lib
+except ImportError:
+    _md_lib = None  # type: ignore
 
 # Markdown extensions (kept for API parity with the desktop module).
 _MD_EXTENSIONS = ["tables", "fenced_code", "codehilite"]
@@ -2835,6 +2842,500 @@ def translate_text_google(
     return translate_text(
         text, source=source, target=target, engine="google", chunk_size=chunk_size
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+#  export formats (content conversion + packaging) — puro, condiviso desktop/CLI
+# ═══════════════════════════════════════════════════════════════════════════════
+
+#: Content formats offered by the single-page and batch export.
+#:
+#: ``kind`` drives the converter:
+#:   ``"text"``   → pure Python (identity / HTML / plain text);
+#:   ``"epub"``   → native EPUB 3 builder (no external tool);
+#:   ``"pandoc"`` → external ``pandoc`` writer (may be runtime-downloaded).
+#: ``ext`` is the output extension, ``pandoc`` the pandoc writer name.
+_CONTENT_FORMATS: dict[str, dict] = {
+    "markdown": {"ext": ".md", "kind": "text"},
+    "html": {"ext": ".html", "kind": "text"},
+    "text": {"ext": ".txt", "kind": "text"},
+    "epub": {"ext": ".epub", "kind": "epub"},
+    "docx": {"ext": ".docx", "kind": "pandoc", "pandoc": "docx"},
+    "odt": {"ext": ".odt", "kind": "pandoc", "pandoc": "odt"},
+    "rtf": {"ext": ".rtf", "kind": "pandoc", "pandoc": "rtf"},
+    "latex": {"ext": ".tex", "kind": "pandoc", "pandoc": "latex"},
+}
+
+#: Packaging → content-format kinds it can carry.
+_ALLOWED_PACKAGING: dict[str, tuple[str, ...]] = {
+    "merged": ("text", "epub", "pandoc"),
+    "zip": ("text", "pandoc"),
+    "folder": ("text", "pandoc"),
+    "vault": ("text",),
+}
+
+#: Stable ordering used by the wizard and the CLI help.
+_CONTENT_FORMAT_ORDER = (
+    "markdown", "html", "text", "epub", "docx", "odt", "rtf", "latex")
+_PACKAGING_ORDER = ("merged", "zip", "folder", "vault")
+
+
+def content_format_ext(fmt: str) -> str:
+    """Output extension (with dot) of a content format (default ``.md``)."""
+    return _CONTENT_FORMATS.get(fmt, _CONTENT_FORMATS["markdown"])["ext"]
+
+
+def content_format_for_ext(ext: str) -> str:
+    """Content format whose extension is ``ext`` (default ``markdown``)."""
+    ext = (ext or "").lower()
+    if ext and not ext.startswith("."):
+        ext = "." + ext
+    for code, spec in _CONTENT_FORMATS.items():
+        if spec["ext"] == ext:
+            return code
+    return "markdown"
+
+
+def content_format_kind(fmt: str) -> str:
+    """Converter kind of a content format (``text`` / ``epub`` / ``pandoc``)."""
+    return _CONTENT_FORMATS.get(fmt, _CONTENT_FORMATS["markdown"])["kind"]
+
+
+def packaging_allows(fmt: str, packaging: str) -> bool:
+    """True when ``packaging`` can carry content format ``fmt``."""
+    return content_format_kind(fmt) in _ALLOWED_PACKAGING.get(packaging, ())
+
+
+def pandoc_target(fmt: str) -> str | None:
+    """pandoc writer name for a content format (``None`` if not pandoc)."""
+    return _CONTENT_FORMATS.get(fmt, {}).get("pandoc")
+
+
+def pandoc_path() -> str | None:
+    """Resolve the ``pandoc`` executable: ``$NOESIS_PANDOC`` then ``$PATH``.
+
+    The desktop app additionally looks in its runtime-download directory and
+    exports the found path as ``$NOESIS_PANDOC`` (see ``_resolve_pandoc``).
+    """
+    env = os.environ.get("NOESIS_PANDOC")
+    if env and os.path.isfile(env):
+        return env
+    return shutil.which("pandoc")
+
+
+def pandoc_available() -> bool:
+    """True when a usable ``pandoc`` executable is available."""
+    return pandoc_path() is not None
+
+
+def pandoc_convert(text: str, target: str, out_path, *, pandoc: str | None = None):
+    """Convert Markdown ``text`` to pandoc ``target``; write ``out_path``.
+
+    ``pandoc`` overrides the resolved executable so callers can point at a
+    runtime-downloaded copy.  Raises ``RuntimeError`` when pandoc is missing
+    or the conversion fails (stderr is used as the message).
+    """
+    exe = pandoc or pandoc_path()
+    if not exe:
+        raise RuntimeError("pandoc is not available")
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(suffix=".md", prefix="noesis-pandoc-")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as tmp:
+            tmp.write(text)
+        proc = subprocess.run(
+            [exe, "-f", "markdown", "-t", target, "-o", str(out_path), tmp_name],
+            capture_output=True, text=True,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(
+                (proc.stderr or proc.stdout or "pandoc failed").strip())
+    finally:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+    return out_path
+
+
+#: Self-contained stylesheet for the HTML export (figures are data URIs).
+_HTML_EXPORT_CSS = """
+:root { color-scheme: light dark; }
+body { font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial,
+       sans-serif; font-size: 16px; line-height: 1.7; color: #1a1a1a;
+       background: #ffffff; max-width: 52rem; margin: 0 auto;
+       padding: 2rem 1.5rem; }
+h1 { font-size: 1.6em; border-bottom: 2px solid #e0e0e0; padding-bottom: .3em; }
+h2 { font-size: 1.3em; margin-top: 1.4em; }
+h3 { font-size: 1.15em; }
+pre { background: #f6f8fa; padding: 12px; border-radius: 6px;
+      overflow-x: auto; }
+code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px;
+       font-family: 'Consolas', 'SFMono-Regular', monospace; font-size: .9em; }
+pre code { background: none; padding: 0; }
+table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+th, td { border: 1px solid #d0d0d0; padding: 6px 12px; text-align: left;
+         vertical-align: top; }
+th { background: #f5f5f5; }
+tr:nth-child(even) { background: #fafafa; }
+blockquote { border-left: 4px solid #d0d0d0; margin: 1em 0; padding: .2em 1em;
+             color: #555555; }
+img { max-width: 100%; height: auto; }
+hr { border: none; border-top: 1px solid #dddddd; margin: 1.6em 0; }
+@media print { body { max-width: none; padding: 0; } }
+"""
+
+_HTML_EXPORT_DOC = """<!DOCTYPE html>
+<html lang="{lang}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{title}</title>
+<style>{css}</style>
+</head>
+<body>
+{body}
+</body>
+</html>
+"""
+
+
+def markdown_to_html(md: str, *, title: str = "", lang: str = "") -> str:
+    """Render Markdown to a self-contained HTML document.
+
+    Figures are already ``data:image/…;base64`` embeds, so the document needs
+    no external assets.
+    """
+    body = _md_lib.markdown(md, extensions=_MD_EXTENSIONS)
+    return _HTML_EXPORT_DOC.format(
+        lang=html.escape(lang or "en"),
+        title=html.escape(title or ""),
+        css=_HTML_EXPORT_CSS,
+        body=body,
+    )
+
+
+def markdown_to_text(md: str) -> str:
+    """Convert Markdown to plain text (block elements become newlines)."""
+    src = _md_lib.markdown(md, extensions=_MD_EXTENSIONS)
+    src = re.sub(r"</(p|div|h[1-6]|li|tr|blockquote|pre|table)>", "\n", src)
+    src = re.sub(r"<br\s*/?>", "\n", src)
+    src = re.sub(r"</(td|th)>", "\t", src)
+    src = re.sub(r"<[^>]+>", "", src)
+    text = html.unescape(src)
+    text = re.sub(r"[ \t]+\n", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip() + "\n"
+
+
+# ── native EPUB 3 builder ──────────────────────────────────────────────────────
+
+_DATA_URI_RE = re.compile(
+    r"data:image/(?P<ext>jpeg|jpg|png|gif|webp|svg\+xml);base64,"
+    r"(?P<b64>[A-Za-z0-9+/=\s]+)")
+_IMG_MIME = {
+    "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+    "gif": "image/gif", "webp": "image/webp", "svg+xml": "image/svg+xml",
+}
+_XHTML_VOID_RE = re.compile(
+    r"<(img|br|hr|col|input|meta|link)\b([^>]*?)\s*/?>", re.IGNORECASE)
+_XHTML_DOC = """<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="{lang}" lang="{lang}">
+<head>
+<meta charset="utf-8" />
+<title>{title}</title>
+<link rel="stylesheet" type="text/css" href="style.css" />
+</head>
+<body>
+{body}
+</body>
+</html>
+"""
+
+
+def _materialize_images(md: str, images: dict[str, bytes]) -> str:
+    """Extract base64 data-URI images into ``images``; return md with links."""
+    def repl(m):
+        ext = m.group("ext")
+        ext = "jpg" if ext in ("jpeg", "jpg") else ext
+        try:
+            data = base64.b64decode(re.sub(r"\s+", "", m.group("b64")))
+        except Exception:  # noqa: BLE001 — un data URI corrotto resta invariato
+            return m.group(0)
+        name = f"img{len(images) + 1:04d}.{ext}"
+        images[name] = data
+        return f"images/{name}"
+    return _DATA_URI_RE.sub(repl, md)
+
+
+def _html_to_xhtml(fragment: str) -> str:
+    """Best-effort XHTML: self-close void elements for EPUB readers."""
+    return _XHTML_VOID_RE.sub(
+        lambda m: f"<{m.group(1)}{m.group(2)} />", fragment)
+
+
+def _epub_uuid(seed: str) -> str:
+    """Deterministic ``urn:uuid`` for an EPUB from a seed string."""
+    h = hashlib.md5(seed.encode("utf-8")).hexdigest()
+    return f"urn:uuid:{h[:8]}-{h[8:12]}-{h[12:16]}-{h[16:20]}-{h[20:32]}"
+
+
+def build_epub(pages, *, title: str, out_path, lang: str = "en",
+               stem: str = "") -> Path:
+    """Write a minimal EPUB 3 book from ``pages`` = list of ``(label, md)``.
+
+    Figures (data URIs) are materialised into ``OEBPS/images/`` so standard
+    readers can display them.
+    """
+    pages = list(pages)
+    out_path = Path(out_path)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    lang_code = lang or "en"
+    book_title = title or stem or "Noesis"
+
+    images: dict[str, bytes] = {}
+    chapters: list[tuple[str, str, str]] = []  # (id, href, xhtml)
+    for i, (label, body) in enumerate(pages, 1):
+        md = _materialize_images(body, images)
+        inner = _html_to_xhtml(_md_lib.markdown(md, extensions=_MD_EXTENSIONS))
+        xhtml = _XHTML_DOC.format(
+            lang=html.escape(lang_code),
+            title=html.escape(label or f"Page {i}"),
+            body=inner,
+        )
+        chapters.append((f"ch{i:04d}", f"chapter{i:04d}.xhtml", xhtml))
+
+    image_ids = {name: f"img{i:04d}" for i, name in enumerate(images, 1)}
+    nav_items = "\n".join(
+        f'      <li><a href="{href}">{html.escape(label)}</a></li>'
+        for (label, _body), (_cid, href, _x) in zip(pages, chapters))
+    nav = f"""<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" \
+xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="{html.escape(lang_code)}">
+<head><meta charset="utf-8" /><title>{html.escape(book_title)}</title></head>
+<body>
+  <nav epub:type="toc" id="toc">
+    <h1>{html.escape(book_title)}</h1>
+    <ol>
+{nav_items}
+    </ol>
+  </nav>
+</body>
+</html>
+"""
+
+    manifest = [
+        '    <item id="nav" href="nav.xhtml" '
+        'media-type="application/xhtml+xml" properties="nav" />',
+        '    <item id="css" href="style.css" media-type="text/css" />',
+    ]
+    spine: list[str] = []
+    for cid, href, _x in chapters:
+        manifest.append(
+            f'    <item id="{cid}" href="{href}" '
+            f'media-type="application/xhtml+xml" />')
+        spine.append(f'    <itemref idref="{cid}" />')
+    for name in images:
+        ext = name.rsplit(".", 1)[-1].lower()
+        manifest.append(
+            f'    <item id="{image_ids[name]}" href="images/{name}" '
+            f'media-type="{_IMG_MIME.get(ext, "image/jpeg")}" />')
+
+    opf = f"""<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" \
+unique-identifier="bookid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="bookid">{_epub_uuid(stem or book_title)}</dc:identifier>
+    <dc:title>{html.escape(book_title)}</dc:title>
+    <dc:language>{html.escape(lang_code)}</dc:language>
+  </metadata>
+  <manifest>
+{chr(10).join(manifest)}
+  </manifest>
+  <spine>
+{chr(10).join(spine)}
+  </spine>
+</package>
+"""
+    container = """<?xml version="1.0" encoding="UTF-8"?>
+<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" \
+media-type="application/oebps-package+xml" />
+  </rootfiles>
+</container>
+"""
+    css = ("body { font-family: serif; line-height: 1.6; }\n"
+           "img { max-width: 100%; height: auto; }\n"
+           "table { border-collapse: collapse; }\n"
+           "th, td { border: 1px solid #cccccc; padding: 4px 8px; }\n")
+
+    with zipfile.ZipFile(out_path, "w") as zf:
+        zf.writestr(zipfile.ZipInfo("mimetype"), "application/epub+zip",
+                    compress_type=zipfile.ZIP_STORED)
+        zf.writestr("META-INF/container.xml", container,
+                    compress_type=zipfile.ZIP_DEFLATED)
+        zf.writestr("OEBPS/content.opf", opf, zipfile.ZIP_DEFLATED)
+        zf.writestr("OEBPS/nav.xhtml", nav, zipfile.ZIP_DEFLATED)
+        zf.writestr("OEBPS/style.css", css, zipfile.ZIP_DEFLATED)
+        for _cid, href, xhtml in chapters:
+            zf.writestr(f"OEBPS/{href}", xhtml, zipfile.ZIP_DEFLATED)
+        for name, data in images.items():
+            zf.writestr(f"OEBPS/images/{name}", data, zipfile.ZIP_DEFLATED)
+    return out_path
+
+
+def render_bytes(md: str, fmt: str, *, title: str = "", lang: str = "",
+                 pandoc: str | None = None) -> bytes:
+    """Encode one Markdown body in the chosen content format.
+
+    Raises ``ValueError`` for container formats (EPUB) that cannot be produced
+    per page — those are only valid as a merged single file.
+    """
+    kind = content_format_kind(fmt)
+    if fmt == "markdown":
+        return md.encode("utf-8")
+    if kind == "text":
+        if fmt == "html":
+            return markdown_to_html(md, title=title, lang=lang).encode("utf-8")
+        return markdown_to_text(md).encode("utf-8")
+    if kind == "pandoc":
+        with tempfile.TemporaryDirectory(prefix="noesis-pandoc-") as d:
+            out = Path(d) / f"page{content_format_ext(fmt)}"
+            pandoc_convert(md, pandoc_target(fmt), out, pandoc=pandoc)
+            return out.read_bytes()
+    raise ValueError(f"cannot render content format {fmt!r} per page")
+
+
+def _named(base, suffix: str, ext: str) -> Path:
+    """``base`` with ``suffix`` inserted before the ``ext`` extension."""
+    base = Path(base)
+    return base.with_name(base.stem + suffix + ext)
+
+
+def build_vault_index(stem: str, pages, units, ext: str) -> str:
+    """Markdown index (TOC) for the ``vault`` packaging."""
+    lines = [f"# {stem}", ""]
+    for p in pages:
+        for suffix, sub in units:
+            name = f"{stem}_pag{p + 1:04d}{suffix}{ext}"
+            tag = " (translation)" if sub == "translated" else ""
+            lines.append(f"- [{name}]({name}){tag}")
+    return "\n".join(lines) + "\n"
+
+
+def _vault_front_matter(title: str, page: int, lang: str = "",
+                        source: str = "") -> str:
+    """YAML front matter for a ``vault`` markdown page (Obsidian/LogSeq)."""
+    def esc(value) -> str:
+        return str(value).replace('"', '\\"')
+    rows = ["---", f'title: "{esc(title)}"', f"page: {page + 1}"]
+    if source:
+        rows.append(f'source: "{esc(source)}"')
+    if lang:
+        rows.append(f'lang: "{esc(lang)}"')
+    rows.append("---")
+    return "\n".join(rows) + "\n\n"
+
+
+def write_export(results, pages, *, units, body_for, packaging: str,
+                 content_fmt: str, out_path=None, out_folder=None,
+                 stem: str = "documento", pandoc: str | None = None,
+                 lang: str = "", title: str = "") -> Path | None:
+    """Compose and write the batch output; return the created path.
+
+    ``units``    : list of ``(suffix, content_key)`` (``_batch_output_units``);
+    ``body_for`` : ``callable(entry, content_key) -> markdown``.
+    """
+    pages = list(pages)
+    units = list(units)
+    ext = content_format_ext(content_fmt)
+    kind = content_format_kind(content_fmt)
+    packaging = packaging or "merged"
+    if not packaging_allows(content_fmt, packaging):
+        raise ValueError(
+            f"packaging {packaging!r} cannot carry content format {content_fmt!r}")
+    base_title = title or stem
+
+    def page_body(page: int, sub: str) -> str:
+        return body_for(results.get(page, {}), sub)
+
+    if packaging == "merged":
+        created: Path | None = None
+        for suffix, sub in units:
+            if kind == "epub":
+                chapters = [
+                    (f"{base_title} — {p + 1}", page_body(p, sub))
+                    for p in pages]
+                path = _named(out_path, suffix, ".epub")
+                build_epub(chapters, title=base_title, out_path=path,
+                           lang=lang, stem=stem)
+            else:
+                chunks = [
+                    f"<!-- pagina {p + 1} -->\n\n{page_body(p, sub)}"
+                    for p in pages]
+                md = "\n\n---\n\n".join(chunks)
+                path = _named(out_path, suffix, ext)
+                if kind == "pandoc":
+                    pandoc_convert(md, pandoc_target(content_fmt), path,
+                                   pandoc=pandoc)
+                else:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(render_bytes(
+                        md, content_fmt, title=base_title, lang=lang,
+                        pandoc=pandoc))
+            created = path
+        return created if created is not None else Path(out_path)
+
+    files: dict[str, bytes] = {}
+    for p in pages:
+        for suffix, sub in units:
+            body = page_body(p, sub)
+            if packaging == "vault" and content_fmt == "markdown":
+                body = _vault_front_matter(
+                    f"{base_title} — {p + 1}", p, lang=lang, source=stem) + body
+            name = f"{stem}_pag{p + 1:04d}{suffix}{ext}"
+            files[name] = render_bytes(
+                body, content_fmt, title=f"{base_title} — {p + 1}", lang=lang,
+                pandoc=pandoc)
+
+    if packaging == "zip":
+        out_path = Path(out_path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        with zipfile.ZipFile(out_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for name, data in files.items():
+                zf.writestr(name, data)
+        return out_path
+
+    out_folder = Path(out_folder)
+    out_folder.mkdir(parents=True, exist_ok=True)
+    for name, data in files.items():
+        (out_folder / name).write_bytes(data)
+    if packaging == "vault":
+        (out_folder / "index.md").write_text(
+            build_vault_index(stem, pages, units, ext), encoding="utf-8")
+    return out_folder
+
+
+def planned_export_paths(pages, units, packaging: str, content_fmt: str,
+                         out_path, out_folder, stem: str) -> list[Path]:
+    """Paths a ``write_export`` run would create (used by ``--dry-run``)."""
+    ext = content_format_ext(content_fmt)
+    if packaging == "merged":
+        base = Path(out_path)
+        return [_named(base, suffix, ext if content_fmt != "epub" else ".epub")
+                for suffix, _sub in units]
+    names = [f"{stem}_pag{p + 1:04d}{suffix}{ext}"
+             for p in pages for suffix, _sub in units]
+    if packaging == "zip":
+        return [Path(out_path)]
+    paths = [Path(out_folder) / n for n in names]
+    if packaging == "vault":
+        paths.append(Path(out_folder) / "index.md")
+    return paths
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -136,6 +136,65 @@ class ExportCoreTests(unittest.TestCase):
             ["doc_pag0001.md", "doc_pag0001-translated.md",
              "doc_pag0002.md", "doc_pag0002-translated.md"])
 
+    # ── nuovi formati di contenuto + vault ─────────────────────────────
+    def test_page_filename_custom_ext(self):
+        self.assertEqual(
+            export_core.page_filename("doc", 0, "", ".html"), "doc_pag0001.html")
+        self.assertEqual(
+            export_core.page_filename("doc", 1, "-translated", ".txt"),
+            "doc_pag0002-translated.txt")
+
+    def test_write_output_html_merged(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "o.html"
+            result = export_core.write_output(
+                {0: {"original": _HDR + "# T\n\nbody"}}, [0], content="original",
+                include_images=True, fmt="merged", out_path=out,
+                out_folder=None, stem="doc", content_fmt="html")
+            self.assertEqual(result, out)
+            text = out.read_text(encoding="utf-8")
+            self.assertIn("<!DOCTYPE html>", text)
+            self.assertIn("<h1>T</h1>", text)
+
+    def test_write_output_text_zip(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "o.zip"
+            export_core.write_output(
+                {0: {"original": _HDR + "# T"}}, [0], content="original",
+                include_images=True, fmt="zip", out_path=out,
+                out_folder=None, stem="doc", content_fmt="text")
+            with zipfile.ZipFile(out) as zf:
+                self.assertEqual(zf.namelist(), ["doc_pag0001.txt"])
+                self.assertNotIn("#", zf.read("doc_pag0001.txt").decode())
+
+    def test_write_output_vault_index_and_front_matter(self):
+        with tempfile.TemporaryDirectory() as d:
+            folder = Path(d) / "vault"
+            export_core.write_output(
+                {0: {"original": _HDR + "A"}, 1: {"original": _HDR + "B"}},
+                [0, 1], content="original", include_images=True, fmt="vault",
+                out_path=None, out_folder=folder, stem="doc")
+            self.assertTrue((folder / "index.md").is_file())
+            page = (folder / "doc_pag0001.md").read_text(encoding="utf-8")
+            self.assertTrue(page.startswith("---\n"))
+            self.assertIn("doc_pag0001.md",
+                          (folder / "index.md").read_text(encoding="utf-8"))
+
+    def test_write_output_invalid_combo_raises(self):
+        with tempfile.TemporaryDirectory() as d:
+            with self.assertRaises(ValueError):
+                export_core.write_output(
+                    {0: {"original": _HDR + "A"}}, [0], content="original",
+                    include_images=True, fmt="folder", out_path=None,
+                    out_folder=Path(d) / "x", stem="doc", content_fmt="epub")
+
+    def test_planned_outputs_vault(self):
+        files = export_core.planned_outputs(
+            [0], content="original", fmt="vault", out_path=None,
+            out_folder="/tmp/x", stem="doc")
+        self.assertEqual(
+            [f.name for f in files], ["doc_pag0001.md", "index.md"])
+
 
 if __name__ == "__main__":
     unittest.main()
