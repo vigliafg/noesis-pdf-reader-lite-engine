@@ -17,9 +17,10 @@ dependencies = [
 
 [project.optional-dependencies]
 test = ["markdown>=3.5"]
+tui = ["textual>=0.80"]
 
 [project.scripts]
-noesis-pdf-engine = "cli:main"
+noesis-pdf-reader-lite-engine = "cli:main"
 
 # The engine modules are flat top-level modules on purpose: ir_layout.py does a
 # lazy `import main` for a few pure helpers, so the headless core must stay
@@ -36,4 +37,9 @@ py-modules = [
     "pages",
     "i18n",
     "theme",
+    "tui",
+    "tui_launch",
+    "tui_state",
+    "tui_i18n",
+    "tui_fallback",
 ]

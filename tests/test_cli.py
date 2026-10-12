@@ -1,4 +1,4 @@
-"""End-to-end tests for the ``noesis-pdf-engine`` CLI.
+"""End-to-end tests for the ``noesis-pdf-reader-lite-engine`` CLI.
 
 Runs the real engine on a small synthetic PDF (no corpus, no network: only
 ``--content original``).

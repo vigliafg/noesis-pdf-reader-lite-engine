@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""``noesis-pdf-engine`` — headless CLI for the Noesis PDF Reader Lite engine.
+"""``noesis-pdf-reader-lite-engine`` — headless CLI for the Noesis PDF Reader Lite engine.
 
 Extracts PDF pages to Markdown with the same adaptive layout engine as the
 desktop app and exposes the *same export options* as its batch-export wizard:
@@ -10,14 +10,14 @@ zip / per-page folder / vault with index).
 
 Examples::
 
-    noesis-pdf-engine book.pdf --pages 1-10 --format merged -o book.md
-    noesis-pdf-engine book.pdf --pages 3,5,10-12 --content both --dst en
-    noesis-pdf-engine scan.pdf --content original --ocr-lang eng+ita
-    noesis-pdf-engine book.pdf --format folder --out out/ --name capitolo
-    noesis-pdf-engine book.pdf --content-format html -o book.html
-    noesis-pdf-engine book.pdf --content-format epub -o book.epub
-    noesis-pdf-engine book.pdf --format vault --out vault/
-    noesis-pdf-engine book.pdf --content-format docx -o book.docx  # richiede pandoc
+    noesis-pdf-reader-lite-engine book.pdf --pages 1-10 --format merged -o book.md
+    noesis-pdf-reader-lite-engine book.pdf --pages 3,5,10-12 --content both --dst en
+    noesis-pdf-reader-lite-engine scan.pdf --content original --ocr-lang eng+ita
+    noesis-pdf-reader-lite-engine book.pdf --format folder --out out/ --name capitolo
+    noesis-pdf-reader-lite-engine book.pdf --content-format html -o book.html
+    noesis-pdf-reader-lite-engine book.pdf --content-format epub -o book.epub
+    noesis-pdf-reader-lite-engine book.pdf --format vault --out vault/
+    noesis-pdf-reader-lite-engine book.pdf --content-format docx -o book.docx  # richiede pandoc
 """
 from __future__ import annotations
 
@@ -46,14 +46,19 @@ def _lang_choices(include_auto: bool) -> list[str]:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        prog="noesis-pdf-engine",
+        prog="noesis-pdf-reader-lite-engine",
         description=(
             "Extract (and optionally translate) PDF pages to Markdown with the "
             "Noesis adaptive layout engine. Export options mirror the desktop "
             "batch-export wizard."
         ),
     )
-    p.add_argument("pdf", help="input PDF file")
+    p.add_argument(
+        "pdf", nargs="?", help="input PDF file (optional with -gui)")
+    p.add_argument(
+        "-gui", "--gui", dest="gui", action="store_true",
+        help="open the interactive TUI wizard (file picker, mouse; falls back "
+             "to a simple line wizard on terminals without Textual support)")
     p.add_argument(
         "--pages", default="all", metavar="SPEC",
         help="page spec: all | 7 | 100-103 | 1,3,5-7 (default: all)",
@@ -120,6 +125,15 @@ def build_parser() -> argparse.ArgumentParser:
         "--pipeline", choices=["ir", "current"], default="ir",
         help="extraction pipeline (default: ir)",
     )
+    p.add_argument(
+        "--tui-theme", dest="tui_theme", choices=["auto", "dark", "light"],
+        default="auto", help="theme for -gui (default: auto/dark)")
+    p.add_argument(
+        "--tui-lang", dest="tui_lang", choices=["it", "en"], default=None,
+        help="language for the -gui wizard (default: from the app config)")
+    p.add_argument(
+        "--ascii", dest="ascii", action="store_true",
+        help="force ASCII rendering in -gui (no emoji/box drawing)")
     p.add_argument("--json", action="store_true", help="print a JSON summary")
     p.add_argument(
         "--dry-run", action="store_true",
@@ -189,7 +203,7 @@ def _print_dry_run(args, pages, out_path, out_folder, stem):
     """Simulate a run: print the files that would be created (no extraction)."""
     units = export_core.output_units(args.content)
     ext = engine.content_format_ext(args.content_format)
-    print("noesis-pdf-engine — dry run (nessuna estrazione)")
+    print("noesis-pdf-reader-lite-engine — dry run (nessuna estrazione)")
     print(f"  input    : {Path(args.pdf).resolve()}")
     print(f"  pages    : {format_pages_label(pages)}  ({len(pages)})")
     print(f"  content  : {args.content}")
@@ -217,6 +231,15 @@ def _print_dry_run(args, pages, out_path, out_folder, stem):
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+
+    if args.gui:
+        import tui_launch
+        return tui_launch.launch(args)
+
+    if not args.pdf:
+        print("error: missing input PDF (or use -gui for the wizard)",
+              file=sys.stderr)
+        return 2
 
     pdf = Path(args.pdf)
     if not pdf.is_file():

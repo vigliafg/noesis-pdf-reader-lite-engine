@@ -13,7 +13,7 @@ Il repository desktop è la **fonte di verità**. Qui:
 - `main.py` è il **core Qt-free** rigenerato dal `main.py` desktop;
 - `export_core.py` riproduce la composizione dell'export batch del desktop
   (merged / zip / cartella, header rimosso, rimozione immagini);
-- `cli.py` è il front-end del comando `noesis-pdf-engine`;
+- `cli.py` è il front-end del comando `noesis-pdf-reader-lite-engine`;
 - `tools/measure_page_model.py` è copiato dal desktop (test del page model).
 
 ## Non modificare a mano il motore

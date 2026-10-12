@@ -1,7 +1,8 @@
 name: tests
 
 # Headless CI: the engine CLI needs no GUI libraries, only PyMuPDF and
-# (optionally) Tesseract for OCR.
+# (optionally) Tesseract for OCR. The optional Textual TUI (`-gui`) is also
+# installed so its headless widget tests run too.
 on:
   push:
     branches: [main]
@@ -41,7 +42,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt -r requirements-dev.txt
+          pip install -r requirements.txt -r requirements-dev.txt -r requirements-tui.txt
 
       - name: Run tests
         run: python -m unittest discover -s tests -v

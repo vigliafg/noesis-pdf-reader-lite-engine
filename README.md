@@ -1,6 +1,6 @@
 # Noesis PDF Reader Lite — Engine (CLI)
 
-**`noesis-pdf-engine`** è l'edizione **da riga di comando** del motore di
+**`noesis-pdf-reader-lite-engine`** è l'edizione **da riga di comando** del motore di
 [Noesis PDF Reader Lite](https://github.com/vigliafg/noesis-pdf-reader-lite):
 estrae le pagine di un PDF in **Markdown** con lo stesso *engine adattativo*
 dell'app desktop (ricostruzione dell'ordine di lettura, tabelle, figure,
@@ -11,8 +11,9 @@ di esportazione** della procedura guidata dell'app: selezione pagine, contenuto
 `odt` / `rtf` / `latex`) e **impacchettamento** (*Markdown unico* / *ZIP* /
 *cartella di pagine* / *vault con indice*).
 
-Nessuna interfaccia grafica, nessuna dipendenza da Qt: solo il motore,
-il traduttore e l'esportatore.
+Nessuna dipendenza da Qt: solo il motore, il traduttore e l'esportatore.
+In più, con `-gui`, un **wizard TUI** opzionale (Textual) per chi vuole
+l'interfaccia guidata senza la GUI desktop.
 
 ---
 
@@ -25,6 +26,7 @@ il traduttore e l'esportatore.
 - [Avvio rapido](#avvio-rapido)
 - [Esempi d'uso](#esempi-duso)
 - [Riferimento delle opzioni](#riferimento-delle-opzioni)
+- [Wizard interattivo (`-gui`)](#wizard-interattivo---gui)
 - [Formati di output](#formati-di-output)
 - [Lingue e traduzione](#lingue-e-traduzione)
 - [OCR (PDF scansionati)](#ocr-pdf-scansionati)
@@ -44,7 +46,7 @@ ricostruito nell'ordine di lettura corretto — anche su layout difficili
 (due/tre colonne, tabelle, box, didascalie) — senza aprire nessuna finestra.
 
 ```bash
-noesis-pdf-engine libro.pdf
+noesis-pdf-reader-lite-engine libro.pdf
 ```
 
 Genera `libro.md` con **tutte** le pagine estratte.
@@ -100,10 +102,10 @@ python cli.py --help          # oppure: python cli.py libro.pdf
 
 ```bash
 pip install .
-noesis-pdf-engine --version
+noesis-pdf-reader-lite-engine --version
 ```
 
-Dopo l'installazione il comando `noesis-pdf-engine` è disponibile ovunque.
+Dopo l'installazione il comando `noesis-pdf-reader-lite-engine` è disponibile ovunque.
 
 ### C) Senza installare nulla (uso dal checkout)
 
@@ -117,17 +119,17 @@ python cli.py libro.pdf --pages 1-10
 
 ```bash
 # 1) Tutte le pagine → un file Markdown nella cartella corrente
-noesis-pdf-engine libro.pdf
+noesis-pdf-reader-lite-engine libro.pdf
 # → libro.md
 
 # 2) Solo alcune pagine
-noesis-pdf-engine libro.pdf --pages 1-10 -o estratto.md
+noesis-pdf-reader-lite-engine libro.pdf --pages 1-10 -o estratto.md
 
 # 3) Una pagina per file, in una cartella
-noesis-pdf-engine libro.pdf --format folder --out out/
+noesis-pdf-reader-lite-engine libro.pdf --format folder --out out/
 
 # 4) Estratto + traduzione in inglese
-noesis-pdf-engine libro.pdf --content both --dst en -o libro_en.md
+noesis-pdf-reader-lite-engine libro.pdf --content both --dst en -o libro_en.md
 ```
 
 > **Nota sul default:** la CLI parte da `--content original` (solo estrazione,
@@ -141,62 +143,62 @@ noesis-pdf-engine libro.pdf --content both --dst en -o libro_en.md
 ### Estrarre un capitolo
 
 ```bash
-noesis-pdf-engine manuale.pdf --pages 12-45 --content original -o cap3.md
+noesis-pdf-reader-lite-engine manuale.pdf --pages 12-45 --content original -o cap3.md
 ```
 
 ### Tradurre una pagina in francese (solo traduzione)
 
 ```bash
-noesis-pdf-engine articolo.pdf --pages 1 --content translated --src en --dst fr
+noesis-pdf-reader-lite-engine articolo.pdf --pages 1 --content translated --src en --dst fr
 ```
 
 ### Originale e traduzione affiancati (nello stesso file)
 
 ```bash
-noesis-pdf-engine articolo.pdf --content both --dst de -o articolo_de.md
+noesis-pdf-reader-lite-engine articolo.pdf --content both --dst de -o articolo_de.md
 ```
 
 ### Un file per pagina, numerato
 
 ```bash
-noesis-pdf-engine tesi.pdf --format folder --out pagine/
+noesis-pdf-reader-lite-engine tesi.pdf --format folder --out pagine/
 # → pagine/tesi_pag0001.md, pagine/tesi_pag0002.md, …
 ```
 
 ### Un archivio ZIP con una pagina per file
 
 ```bash
-noesis-pdf-engine tesi.pdf --format zip -o tesi.zip
+noesis-pdf-reader-lite-engine tesi.pdf --format zip -o tesi.zip
 ```
 
 ### Selezione mista di pagine
 
 ```bash
-noesis-pdf-engine libro.pdf --pages "1,3,7-9,15"
+noesis-pdf-reader-lite-engine libro.pdf --pages "1,3,7-9,15"
 ```
 
 ### PDF scansionato (OCR)
 
 ```bash
-noesis-pdf-engine scansione.pdf --content original --ocr-lang eng+ita
+noesis-pdf-reader-lite-engine scansione.pdf --content original --ocr-lang eng+ita
 ```
 
 ### Solo testo, senza immagini incorporate
 
 ```bash
-noesis-pdf-engine libro.pdf --no-images -o libro_solo_testo.md
+noesis-pdf-reader-lite-engine libro.pdf --no-images -o libro_solo_testo.md
 ```
 
 ### Forzare la pipeline classica (debug/confronto)
 
 ```bash
-noesis-pdf-engine libro.pdf --pipeline current -o confronto.md
+noesis-pdf-reader-lite-engine libro.pdf --pipeline current -o confronto.md
 ```
 
 ### Riepilogo leggibile da un altro programma (JSON)
 
 ```bash
-noesis-pdf-engine libro.pdf --pages 1-5 --json -o out.md
+noesis-pdf-reader-lite-engine libro.pdf --pages 1-5 --json -o out.md
 ```
 
 ---
@@ -205,7 +207,7 @@ noesis-pdf-engine libro.pdf --pages 1-5 --json -o out.md
 
 | Opzione | Valori | Default | Descrizione |
 |---|---|---|---|
-| `pdf` *(posizionale)* | percorso | — | Il PDF di input (obbligatorio). |
+| `pdf` *(posizionale)* | percorso | — | Il PDF di input (obbligatorio, **opzionale con `-gui`**). |
 | `--pages SPEC` | `all`, `7`, `100-103`, `1,3,5-7` | `all` | Pagine da elaborare (1-based). Gli spazi sono ignorati; gli estremi invertiti sono accettati. |
 | `--content` | `original` · `translated` · `both` | `original` | Cosa esportare. |
 | `--engine` | `google` · `microsoft` | `google` | Motore di traduzione. |
@@ -221,6 +223,10 @@ noesis-pdf-engine libro.pdf --pages 1-5 --json -o out.md
 | `--ocr-lang LANG` | es. `eng+ita` | derivato da `--src` | Lingua/e Tesseract per l'OCR. |
 | `--tessdata DIR` | percorso | — | Cartella `tessdata` per l'OCR (imposta `TESSDATA_PREFIX`). |
 | `--pipeline` | `ir` · `current` | `ir` | Pipeline di estrazione (`current` è la classica/di confronto). |
+| `-gui`, `--gui` | flag | off | Apre il **wizard TUI** interattivo (file picker, mouse). |
+| `--tui-theme` | `auto` · `dark` · `light` | `auto` | Tema della TUI. |
+| `--tui-lang` | `it` · `en` | dal config | Lingua dell'interfaccia TUI. |
+| `--ascii` | flag | off | Forza ASCII nella TUI (niente emoji / box drawing). |
 | `--json` | flag | off | Stampa un riepilogo JSON su stdout. |
 | `--dry-run` | flag | off | **Simulazione**: mostra i file che verrebbero creati, senza estrarre né tradurre. |
 | `-q`, `--quiet` | flag | off | Nessun progresso. |
@@ -229,6 +235,54 @@ noesis-pdf-engine libro.pdf --pages 1-5 --json -o out.md
 
 **Codici di uscita:** `0` = tutto ok · `1` = almeno una pagina è fallita ·
 `2` = errore di input (file mancante, `--pages` non valido, PDF illeggibile).
+
+---
+
+## Wizard interattivo (`-gui`)
+
+Se preferisci un'interfaccia guidata alla riga di comando, lancia la **TUI**:
+
+```bash
+noesis-pdf-reader-lite-engine -gui
+```
+
+Si apre un wizard a **5 passi** identico per opzioni a quello dell'app desktop:
+
+1. **File e pagine** — *file picker* per il PDF (con filtro `*.pdf`) e scelta
+   pagine: *tutte* / *intervallo* / *libera* (`1,3,7-9`).
+2. **Contenuto** — originale / traduzione / entrambi, figure incluse, traduci-mancanti.
+3. **Lingue e motore** — origine (`Auto`), destinazione, Google/Microsoft e
+   (novità della CLI) lingua OCR e cartella `tessdata`.
+4. **Output** — *formato contenuto* × *impacchettamento* (le combinazioni non
+   valide sono disattivate), cartella di destinazione col *file picker* e nome file.
+5. **Riepilogo** — tutte le scelte e **l'elenco dei file che verranno creati**;
+   poi parte l'esportazione con barra di avanzamento e log per pagina.
+
+**Mouse e tastiera.** Clic, rotella e doppio clic funzionano quando il terminale
+li supporta; da tastiera: `Tab`/frecce per il focus, `Invio`/`Spazio` per
+attivare, `1-5` per saltare a un passo, `b`/`n` indietro/avanti, `Ctrl+R` per
+eseguire, `a` per ASCII, `l` per la lingua, `t` per il tema, `?` per l'aiuto,
+`q`/`Esc` per uscire.
+
+**Compatibilità.** Se il terminale non può ospitare la TUI (`TERM=dumb`, nessun
+TTY, Textual non installato) il comando **non fallisce**: ripiega su un wizard a
+righe che usa solo `input()`. Per la TUI moderna installa l'extra:
+
+```bash
+pip install -r requirements-tui.txt     # oppure: pip install .[tui]
+```
+
+Esempi:
+
+```bash
+noesis-pdf-reader-lite-engine -gui                              # parte dal file picker
+noesis-pdf-reader-lite-engine -gui libro.pdf --dst en           # precompila il wizard
+noesis-pdf-reader-lite-engine -gui libro.pdf -o out/ --format zip
+noesis-pdf-reader-lite-engine -gui --ascii                      # terminali senza UTF-8
+```
+
+> Le scelte dell'ultima sessione vengono ricordate in
+> `~/.config/noesis-pdf-reader-lite-engine/tui.json`.
 
 ---
 
@@ -273,7 +327,7 @@ Il file è `<name>.md`; con `--content translated` diventa
 ### `zip` — un file per pagina, dentro uno ZIP
 
 ```bash
-noesis-pdf-engine tesi.pdf --format zip -o tesi.zip
+noesis-pdf-reader-lite-engine tesi.pdf --format zip -o tesi.zip
 # tesi.zip contiene: tesi_pag0001.md, tesi_pag0002.md, …
 # con --content translated: tesi_pag0001-translated.md, …
 ```
@@ -281,7 +335,7 @@ noesis-pdf-engine tesi.pdf --format zip -o tesi.zip
 ### `folder` — un file per pagina, in una cartella
 
 ```bash
-noesis-pdf-engine tesi.pdf --format folder --out pagine/
+noesis-pdf-reader-lite-engine tesi.pdf --format folder --out pagine/
 # pagine/tesi_pag0001.md, pagine/tesi_pag0002.md, …
 ```
 
@@ -292,7 +346,7 @@ il formato Markdown, un **front-matter YAML** in ogni pagina (compatibile
 Obsidian/LogSeq):
 
 ```bash
-noesis-pdf-engine tesi.pdf --format vault --out tesi/
+noesis-pdf-reader-lite-engine tesi.pdf --format vault --out tesi/
 # tesi/index.md, tesi/tesi_pag0001.md, tesi/tesi_pag0002.md, …
 ```
 
@@ -309,9 +363,9 @@ Il Markdown estratto può essere convertito al volo:
 | `docx` · `odt` · `rtf` · `latex` | `.docx` · `.odt` · `.rtf` · `.tex` | **pandoc** (richiesto) |
 
 ```bash
-noesis-pdf-engine libro.pdf --content-format html -o libro.html
-noesis-pdf-engine libro.pdf --content-format epub -o libro.epub
-noesis-pdf-engine libro.pdf --content-format docx -o libro.docx   # richiede pandoc
+noesis-pdf-reader-lite-engine libro.pdf --content-format html -o libro.html
+noesis-pdf-reader-lite-engine libro.pdf --content-format epub -o libro.epub
+noesis-pdf-reader-lite-engine libro.pdf --content-format docx -o libro.docx   # richiede pandoc
 ```
 
 > Le combinazioni valide: `epub` solo con `--format merged`; i formati pandoc
@@ -332,11 +386,11 @@ Con `--dry-run` vedi **esattamente** quali file verrebbero creati, senza
 estrarre né tradurre (nessuna rete):
 
 ```bash
-noesis-pdf-engine libro.pdf --pages 1-3 --content both --format folder --dry-run
+noesis-pdf-reader-lite-engine libro.pdf --pages 1-3 --content both --format folder --dry-run
 ```
 
 ```text
-noesis-pdf-engine — dry run (nessuna estrazione)
+noesis-pdf-reader-lite-engine — dry run (nessuna estrazione)
   input    : /percorso/libro.pdf
   pages    : 1-3  (3)
   content  : both
@@ -372,10 +426,10 @@ Esempi:
 
 ```bash
 # rileva la lingua e traduce in italiano (default)
-noesis-pdf-engine doc.pdf --content translated
+noesis-pdf-reader-lite-engine doc.pdf --content translated
 
 # da inglese a tedesco con Microsoft
-noesis-pdf-engine doc.pdf --content translated --src en --dst de --engine microsoft
+noesis-pdf-reader-lite-engine doc.pdf --content translated --src en --dst de --engine microsoft
 ```
 
 > **Cache:** a differenza dell'app, la CLI **non ha cache su disco**: le pagine
@@ -393,10 +447,10 @@ della lingua desiderata.
 
 ```bash
 # lingua esplicita
-noesis-pdf-engine scansione.pdf --content original --ocr-lang eng+ita
+noesis-pdf-reader-lite-engine scansione.pdf --content original --ocr-lang eng+ita
 
 # cartella tessdata personalizzata
-noesis-pdf-engine scansione.pdf --ocr-lang eng --tessdata /percorso/tessdata
+noesis-pdf-reader-lite-engine scansione.pdf --ocr-lang eng --tessdata /percorso/tessdata
 ```
 
 Se `--ocr-lang` non è indicato, la lingua OCR deriva da `--src`; con `--src auto`
@@ -418,9 +472,9 @@ brew install tesseract tesseract-lang
 
 ## Differenze rispetto all'app desktop
 
-| Aspetto | App desktop | CLI `noesis-pdf-engine` |
+| Aspetto | App desktop | CLI `noesis-pdf-reader-lite-engine` |
 |---|---|---|
-| Interfaccia | GUI (PyQt6) | Riga di comando |
+| Interfaccia | GUI (PyQt6) | Riga di comando · wizard TUI opzionale (`-gui`) |
 | Contenuto di default | `translated` | `original` (nessuna rete) |
 | Pagine di default | pagina corrente | `all` |
 | Zone manuali (escludi/includi) | sì, disegnate a mano | **no** (solo pipeline automatica) |
@@ -482,6 +536,17 @@ dell'app (header rimosso, blocchi `<!-- pagina N -->`, ZIP/cartella, rimozione
 immagini). Il repository desktop resta la **fonte di verità**: per aggiornare
 il motore si lancia lo script di sync.
 
+Il wizard `-gui` è composto da moduli **solo front-end** (non rigenerati, non
+verbatim), che si limitano a comporre le stesse chiamate della CLI:
+
+```
+tui.py          · app Textual (passi, file picker, progress)
+tui_launch.py   · scelta fra TUI moderna e fallback a righe
+tui_state.py    · stato/validazione puri + esecuzione (riusa export_core)
+tui_i18n.py     · stringhe della TUI + probe del terminale
+tui_fallback.py · wizard a righe per terminali senza Textual
+```
+
 ---
 
 ## Test e CI
@@ -497,13 +562,17 @@ La suite include:
   errori, entrypoint);
 - **unit test** della composizione di export;
 - **smoke test** del motore headless;
+- **test del wizard `-gui`**: logica pura (`tests/test_tui_state.py`), fallback a
+  righe, wiring della CLI e widget Textual (`tests/test_tui_gui.py`; i test dei
+  widget si saltano da soli se Textual non è installato);
 - **parità di sorgente** con il checkout desktop (`tests/test_sync_parity.py`,
   si salta se il repo desktop non è presente);
 - i **test del motore** portati dal repository desktop (i casi che richiedono il
   corpus reale si saltano da soli se i PDF non ci sono).
 
-La CI (`.github/workflows/tests.yml`) gira **headless, senza Qt**, su ogni push
-e PR: installa PyMuPDF, PyMuPDF4LLM e Tesseract ed esegue l'intera suite.
+La CI (`.github/workflows/tests.yml`) gira **headless, senza Qt e senza TTY**, su
+ogni push e PR: installa PyMuPDF, PyMuPDF4LLM, Tesseract e Textual ed esegue
+l'intera suite.
 
 ---
 
