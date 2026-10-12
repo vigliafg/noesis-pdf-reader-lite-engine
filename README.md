@@ -84,6 +84,9 @@ copiato verbatim (vedi [Come è costruito](#come-è-costruito)).
 - **pip**
 - *(opzionale)* **Tesseract OCR** — serve solo per i PDF **scansionati** (immagini).
   Senza Tesseract l'estrazione funziona comunque sui PDF con testo nativo.
+- *(opzionale)* **Textual** — serve solo per il **wizard `-gui`**. Senza Textual il
+  comando funziona lo stesso: `-gui` ripiega su un wizard a righe (vedi
+  [Wizard interattivo](#wizard-interattivo---gui)).
 
 ---
 
@@ -106,6 +109,13 @@ noesis-pdf-reader-lite-engine --version
 ```
 
 Dopo l'installazione il comando `noesis-pdf-reader-lite-engine` è disponibile ovunque.
+
+Per includere anche il **wizard TUI** (`-gui`) installa l'extra `tui`:
+
+```bash
+pip install ".[tui]"                    # oppure: pip install -r requirements-tui.txt
+noesis-pdf-reader-lite-engine -gui
+```
 
 ### C) Senza installare nulla (uso dal checkout)
 
@@ -130,6 +140,9 @@ noesis-pdf-reader-lite-engine libro.pdf --format folder --out out/
 
 # 4) Estratto + traduzione in inglese
 noesis-pdf-reader-lite-engine libro.pdf --content both --dst en -o libro_en.md
+
+# 5) Interfaccia guidata (wizard TUI)
+noesis-pdf-reader-lite-engine -gui
 ```
 
 > **Nota sul default:** la CLI parte da `--content original` (solo estrazione,
@@ -246,15 +259,24 @@ Se preferisci un'interfaccia guidata alla riga di comando, lancia la **TUI**:
 noesis-pdf-reader-lite-engine -gui
 ```
 
+Il PDF è **opzionale**: senza argomenti il wizard parte dal *file picker*; se lo
+passi viene precompilato e puoi modificarlo dall'interfaccia.
+
+```bash
+noesis-pdf-reader-lite-engine -gui libro.pdf        # precompila il PDF
+```
+
 Si apre un wizard a **5 passi** identico per opzioni a quello dell'app desktop:
 
 1. **File e pagine** — *file picker* per il PDF (con filtro `*.pdf`) e scelta
    pagine: *tutte* / *intervallo* / *libera* (`1,3,7-9`).
-2. **Contenuto** — originale / traduzione / entrambi, figure incluse, traduci-mancanti.
+2. **Contenuto** — originale / traduzione / entrambi, figure incluse,
+   traduci-mancanti.
 3. **Lingue e motore** — origine (`Auto`), destinazione, Google/Microsoft e
    (novità della CLI) lingua OCR e cartella `tessdata`.
 4. **Output** — *formato contenuto* × *impacchettamento* (le combinazioni non
-   valide sono disattivate), cartella di destinazione col *file picker* e nome file.
+   valide sono disattivate), cartella di destinazione col *file picker* e nome
+   file.
 5. **Riepilogo** — tutte le scelte e **l'elenco dei file che verranno creati**;
    poi parte l'esportazione con barra di avanzamento e log per pagina.
 
@@ -262,14 +284,17 @@ Si apre un wizard a **5 passi** identico per opzioni a quello dell'app desktop:
 li supporta; da tastiera: `Tab`/frecce per il focus, `Invio`/`Spazio` per
 attivare, `1-5` per saltare a un passo, `b`/`n` indietro/avanti, `Ctrl+R` per
 eseguire, `a` per ASCII, `l` per la lingua, `t` per il tema, `?` per l'aiuto,
-`q`/`Esc` per uscire.
+`q`/`Esc` per uscire. L'esportazione si può **annullare** a metà run.
 
 **Compatibilità.** Se il terminale non può ospitare la TUI (`TERM=dumb`, nessun
-TTY, Textual non installato) il comando **non fallisce**: ripiega su un wizard a
-righe che usa solo `input()`. Per la TUI moderna installa l'extra:
+TTY, Textual non installato) il comando **non fallisce**: ripiega
+automaticamente su un wizard a righe che usa solo `input()`. La TUI si adatta
+anche ai terminali senza colori (`NO_COLOR`) e senza UTF-8 (modalità ASCII).
+
+Per la TUI moderna installa l'extra:
 
 ```bash
-pip install -r requirements-tui.txt     # oppure: pip install .[tui]
+pip install -r requirements-tui.txt     # oppure: pip install ".[tui]"
 ```
 
 Esempi:
@@ -279,6 +304,7 @@ noesis-pdf-reader-lite-engine -gui                              # parte dal file
 noesis-pdf-reader-lite-engine -gui libro.pdf --dst en           # precompila il wizard
 noesis-pdf-reader-lite-engine -gui libro.pdf -o out/ --format zip
 noesis-pdf-reader-lite-engine -gui --ascii                      # terminali senza UTF-8
+noesis-pdf-reader-lite-engine -gui --tui-theme light            # tema chiaro
 ```
 
 > Le scelte dell'ultima sessione vengono ricordate in
@@ -490,6 +516,10 @@ brew install tesseract tesseract-lang
 **`error: input PDF not found`**
 Controlla il percorso del file. La CLI esce con codice `2`.
 
+**`error: missing input PDF (or use -gui for the wizard)`**
+Non hai passato il PDF e non sei in modalità `-gui`. Indica il file oppure lancia
+`noesis-pdf-reader-lite-engine -gui`.
+
 **`error: invalid --pages`**
 La specifica è fuori intervallo o malformata. Usa `all`, un numero, un
 intervallo (`10-20`) o una lista (`1,3,7-9`). Le pagine partono da `1`.
@@ -502,6 +532,11 @@ e il codice di uscita è `1` (vedi `--json` per l'elenco degli errori).
 **La traduzione fallisce**
 Serve Internet; l'endpoint può essere temporaneamente bloccato. Prova l'altro
 motore con `--engine microsoft`. Con `--json` vedi quali pagine hanno fallito.
+
+**Il wizard `-gui` non si apre / vedo un menu a righe**
+Il terminale non supporta la TUI (non è un TTY, `TERM=dumb`) oppure Textual non è
+installato: in quel caso parte il wizard semplice. Installa l'extra con
+`pip install ".[tui]"`. Con `--ascii` disegni anche su terminali senza UTF-8.
 
 **Voglio l'output identico all'app desktop**
 Lascia `--pipeline ir` (default) e usa `--content original` (o `translated`
@@ -540,10 +575,10 @@ Il wizard `-gui` è composto da moduli **solo front-end** (non rigenerati, non
 verbatim), che si limitano a comporre le stesse chiamate della CLI:
 
 ```
-tui.py          · app Textual (passi, file picker, progress)
+tui.py          · app Textual (passi, file picker, progress, tema)
 tui_launch.py   · scelta fra TUI moderna e fallback a righe
 tui_state.py    · stato/validazione puri + esecuzione (riusa export_core)
-tui_i18n.py     · stringhe della TUI + probe del terminale
+tui_i18n.py     · stringhe della TUI + probe delle capacità del terminale
 tui_fallback.py · wizard a righe per terminali senza Textual
 ```
 
