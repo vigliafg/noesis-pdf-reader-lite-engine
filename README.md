@@ -85,6 +85,8 @@ copiato verbatim (vedi [Come è costruito](#come-è-costruito)).
 ## Requisiti
 
 - **Python 3.10+**
+- **PyMuPDF 1.x** e **PyMuPDF4LLM 1.x** (il motore è tarato su questa
+  serie: la 2.x cambia l'estrazione delle righe e il layout).
 - **pip**
 - *(opzionale)* **Tesseract OCR** — serve solo per i PDF **scansionati** (immagini).
   Senza Tesseract l'estrazione funziona comunque sui PDF con testo nativo.

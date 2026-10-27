@@ -1,6 +1,8 @@
 # Noesis PDF Reader Lite — engine CLI (headless, no PyQt)
-pymupdf>=1.24
-pymupdf4llm>=0.0.9
+# PyMuPDF 2.x cambia l'ordine/estrazione delle righe e rompe il motore
+# layout tarato su 1.x: restare sulla serie 1.x (allineata al desktop).
+pymupdf>=1.24,<2
+pymupdf4llm>=0.0.9,<2
 
 # Markdown → HTML/TXT/EPUB conversion in the shared export core.
 markdown>=3.5
