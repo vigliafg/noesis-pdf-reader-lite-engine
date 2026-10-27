@@ -222,6 +222,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: artifacts/*
-          body_path: RELEASE_NOTES.md
+          body_path: ${{ github.workspace }}/RELEASE_NOTES.md
           # Idempotente: un re-tag può riusare la release esistente.
           overwrite_files: true
