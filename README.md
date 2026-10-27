@@ -1,5 +1,8 @@
 # Noesis PDF Reader Lite — Engine (CLI)
 
+[![tests](https://github.com/vigliafg/noesis-pdf-reader-lite-engine/actions/workflows/tests.yml/badge.svg)](https://github.com/vigliafg/noesis-pdf-reader-lite-engine/actions/workflows/tests.yml)
+[![release](https://github.com/vigliafg/noesis-pdf-reader-lite-engine/actions/workflows/release.yml/badge.svg)](https://github.com/vigliafg/noesis-pdf-reader-lite-engine/actions/workflows/release.yml)
+
 **`noesis-pdf-reader-lite-engine`** è l'edizione **da riga di comando** del motore di
 [Noesis PDF Reader Lite](https://github.com/vigliafg/noesis-pdf-reader-lite):
 estrae le pagine di un PDF in **Markdown** con lo stesso *engine adattativo*
@@ -33,6 +36,7 @@ l'interfaccia guidata senza la GUI desktop.
 - [Differenze rispetto all'app desktop](#differenze-rispetto-allapp-desktop)
 - [Risoluzione dei problemi](#risoluzione-dei-problemi)
 - [Come è costruito](#come-è-costruito)
+- [Release](#release)
 - [Test e CI](#test-e-ci)
 - [Licenza](#licenza)
 
@@ -584,6 +588,55 @@ tui_fallback.py · wizard a righe per terminali senza Textual
 
 ---
 
+## Release
+
+Le release sono **multipiattaforma**, sullo stesso schema dei repository
+desktop (`noesis-pdf-reader-lite`, `noesis-ebook-translator`). Il workflow
+`.github/workflows/release.yml` parte con un tag `v*` oppure manualmente da
+**Actions → build-releases → Run workflow**.
+
+| Target | Runner | Artefatto |
+| --- | --- | --- |
+| Windows x64 | `windows-latest` | `.exe` + installer **NSIS** (`installer.nsi`) |
+| Linux x64 | `ubuntu-latest` | **AppImage** (`noesis-pdf-reader-lite-engine-x86_64.AppImage`) |
+| macOS x86_64 | `macos-15-intel` | `.dmg` |
+| macOS Apple Silicon | `macos-15` | `.dmg` |
+
+Nomi degli asset:
+
+```text
+noesis-pdf-reader-lite-engine-windows-x64.exe
+noesis-pdf-reader-lite-engine-windows-x64-setup.exe
+noesis-pdf-reader-lite-engine-macos-x64.dmg
+noesis-pdf-reader-lite-engine-macos-arm64.dmg
+noesis-pdf-reader-lite-engine-x86_64.AppImage
+SHA256SUMS.txt
+```
+
+Essendo un'app **da console**, il build PyInstaller **non** usa `--windowed`:
+l'eseguibile apre il terminale. La versione del pacchetto segue quella del
+desktop di riferimento: la release `v0.30.0` corrisponde a
+`noesis-pdf-reader-lite` `v0.30.0`.
+
+Per pubblicare:
+
+```bash
+git tag v0.30.0
+git push origin v0.30.0
+```
+
+### Build locale (opzionale)
+
+```bash
+pip install pyinstaller
+pyinstaller --onefile --clean --noconfirm \
+  --name noesis-pdf-reader-lite-engine \
+  --collect-all textual --collect-all pymupdf --collect-all pymupdf4llm \
+  cli.py
+```
+
+---
+
 ## Test e CI
 
 ```bash
@@ -600,6 +653,16 @@ La suite include:
 - **test del wizard `-gui`**: logica pura (`tests/test_tui_state.py`), fallback a
   righe, wiring della CLI e widget Textual (`tests/test_tui_gui.py`; i test dei
   widget si saltano da soli se Textual non è installato);
+- **end-to-end della TUI** (`tests/test_tui_e2e.py` + harness
+  `tests/tui_e2e.py`): pilotano l'app Textual *reale* attraverso l'intero flusso
+  utente (click, tasti, digitazione) e verificano sia lo stato a schermo sia i
+  **file esportati** (merged / zip / cartella / vault, formati, selezione
+  pagine, annullamento, codici di uscita). Girano offline su PDF generati e si
+  saltano senza Textual. Per lanciare solo questi:
+
+  ```bash
+  python -m unittest tests.test_tui_e2e -v
+  ```
 - **parità di sorgente** con il checkout desktop (`tests/test_sync_parity.py`,
   si salta se il repo desktop non è presente);
 - i **test del motore** portati dal repository desktop (i casi che richiedono il

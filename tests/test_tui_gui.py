@@ -286,6 +286,90 @@ class TextualAppTests(unittest.IsolatedAsyncioTestCase):
             # stays on the wizard, does not start a run
             self.assertNotEqual(app._view, "run")
 
+    async def test_opening_wizard_keeps_all_pages(self):
+        # Merely mounting must not switch the page mode (Textual fires
+        # Input.Changed for the initial values too).
+        app = self._app(dark=True)
+        async with app.run_test(size=(100, 34)) as pilot:
+            await pilot.pause()
+            self.assertEqual(app.opts.pages_mode, "all")
+
+    async def test_editing_range_fields_selects_range_mode(self):
+        from textual.widgets import Input
+
+        app = self._app(dark=True)
+        async with app.run_test(size=(100, 34)) as pilot:
+            await pilot.pause()
+            self.assertEqual(app.opts.pages_mode, "all")
+            app.query_one("#in-from", Input).value = "2"
+            app.query_one("#in-to", Input).value = "3"
+            await pilot.pause()
+            self.assertEqual(app.opts.pages_mode, "range")
+            self.assertEqual((app.opts.range_from, app.opts.range_to), (2, 3))
+            pages, errors = tui_state.validate(app.opts)
+            self.assertEqual(errors, [])
+            self.assertEqual(pages, [1, 2])
+
+    async def test_editing_free_field_selects_free_mode(self):
+        from textual.widgets import Input
+
+        app = self._app(dark=True)
+        async with app.run_test(size=(100, 34)) as pilot:
+            await pilot.pause()
+            self.assertEqual(app.opts.pages_mode, "all")
+            app.query_one("#in-free", Input).value = "2-3"
+            await pilot.pause()
+            self.assertEqual(app.opts.pages_mode, "free")
+            pages, errors = tui_state.validate(app.opts)
+            self.assertEqual(errors, [])
+            self.assertEqual(pages, [1, 2])
+
+    async def test_destbar_is_always_visible(self):
+        from textual.widgets import Static
+
+        app = self._app(dark=True)
+        async with app.run_test(size=(100, 34)) as pilot:
+            await pilot.pause()
+            # present on the first step, shows folder + name
+            text = str(app.query_one("#destbar", Static).render())
+            self.assertIn("app_out", text)
+            self.assertIn(str(self.dir), text)
+
+    async def test_output_fields_precede_format_lists(self):
+        # Folder and name must be reachable without scrolling past the lists.
+        app = self._app(dark=True)
+        async with app.run_test(size=(100, 24)) as pilot:
+            await pilot.pause()
+            app.action_goto(3)
+            await pilot.pause()
+            ids = [w.id for w in app.query_one("#pane-output").query("Input")]
+            self.assertLess(ids.index("in-folder"), ids.index("in-pandoc"))
+            self.assertLess(ids.index("in-name"), ids.index("in-pandoc"))
+
+    async def test_name_follows_pdf_until_edited(self):
+        from textual.widgets import Input
+
+        from tui import ExportWizardApp
+
+        opts = tui_state.ExportOptions(
+            pdf=str(self.pdf), out_folder=str(self.dir))
+        app = ExportWizardApp(opts, dark=True)
+        async with app.run_test(size=(100, 34)) as pilot:
+            await pilot.pause()
+            self.assertEqual(app.query_one("#in-name", Input).value, "s_estratto")
+            other = make_text_pdf(self.dir / "altro.pdf", pages=2)
+            app._on_picked_pdf(other)
+            await pilot.pause()
+            self.assertEqual(app.query_one("#in-name", Input).value,
+                             "altro_estratto")
+            # once edited by hand, further PDF changes must not override it
+            app.query_one("#in-name", Input).value = "mio_nome"
+            await pilot.pause()
+            self.assertTrue(app._name_touched)
+            app._on_picked_pdf(self.pdf)
+            await pilot.pause()
+            self.assertEqual(app.query_one("#in-name", Input).value, "mio_nome")
+
 
 if __name__ == "__main__":
     unittest.main()

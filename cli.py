@@ -34,7 +34,7 @@ import main as engine
 from i18n import TRANSLATION_ENGINES, TRANSLATION_LANGUAGES
 from pages import PageSpecError, describe_pages, format_pages_label, parse_pages
 
-__version__ = "0.1.0"
+__version__ = "0.30.0"
 
 
 def _lang_choices(include_auto: bool) -> list[str]:

@@ -239,6 +239,15 @@ Select { width: 1fr; margin-bottom: 1; }
     align-horizontal: right;
     padding: 0 2;
 }
+#destbar {
+    height: auto;
+    max-height: 4;
+    background: $surface;
+    color: $text-muted;
+    border-top: solid $border-blurred;
+    padding: 0 2;
+}
+#destbar.-unset { color: $text-disabled; }
 #footerbar Button { margin-left: 1; }
 #pages-preview { margin-top: 1; }
 #out-preview { margin-top: 1; }
@@ -302,6 +311,11 @@ class ExportWizardApp(App):
         self._done = 0
         self._worker = None
         self._result = None
+        # Track whether the user edited the output *Name* field by hand: until
+        # then it follows the chosen PDF (``{stem}_estratto``). A name coming
+        # from prefs/CLI is explicit and must not be overwritten.
+        self._name_touched = bool(options.name and options.name.strip())
+        self._last_name_value = ""
 
         if ansi:
             self.theme = "ansi-dark" if dark else "ansi-light"
@@ -326,6 +340,7 @@ class ExportWizardApp(App):
             yield from self._pane_summary()
             yield from self._pane_run()
             yield from self._pane_result()
+        yield Static("", id="destbar")
         with Horizontal(id="footerbar"):
             yield Button(ti.T("export.wizard.back"), id="btn-back")
             yield Button(ti.T("settings.cancel"), id="btn-cancel")
@@ -411,6 +426,17 @@ class ExportWizardApp(App):
         o = self.opts
         with VerticalScroll(id="pane-output"):
             yield Static(ti.T("export.wizard.output.title"), classes="h3")
+            # Destination folder + name first: they must be reachable without
+            # scrolling past the (long) format/packaging lists.
+            yield Label(ti.T("export.wizard.output.folder"), classes="label")
+            with Horizontal(classes="row"):
+                yield Input(value=o.out_folder or str(tui_state.default_folder()),
+                            id="in-folder")
+                yield Button(ti.T("tui.pick_folder"), id="btn-pick-folder")
+            yield Label(ti.T("export.wizard.output.filename"), classes="label")
+            name_value = o.name or tui_state.default_name(o)
+            self._last_name_value = name_value
+            yield Input(value=name_value, id="in-name")
             yield Static(ti.T("export.output.content_format"), classes="h3")
             buttons = []
             for code in engine._CONTENT_FORMAT_ORDER:
@@ -428,13 +454,6 @@ class ExportWizardApp(App):
                               disabled=(code not in allowed))
                   for code in engine._PACKAGING_ORDER],
                 id="rs-packaging")
-            yield Label(ti.T("export.wizard.output.folder"), classes="label")
-            with Horizontal(classes="row"):
-                yield Input(value=o.out_folder or str(tui_state.default_folder()),
-                            id="in-folder")
-                yield Button(ti.T("tui.pick_folder"), id="btn-pick-folder")
-            yield Label(ti.T("export.wizard.output.filename"), classes="label")
-            yield Input(value=o.name or tui_state.default_name(o), id="in-name")
             yield Label(ti.T("tui.field.pandoc"), classes="label")
             yield Input(value=o.pandoc, placeholder=ti.T("tui.optional"),
                         id="in-pandoc")
@@ -518,6 +537,21 @@ class ExportWizardApp(App):
     def _pandoc_ready(self) -> bool:
         return bool(self.opts.pandoc.strip()) or engine.pandoc_path() is not None
 
+    def _set_pages_mode(self, code: str) -> None:
+        """Apply a page-selection mode and reflect it on the radio set.
+
+        Called when the user types in the *from/to* or *free* fields so that
+        entering a selection implicitly selects the matching mode (otherwise
+        the text would be silently ignored while the mode stayed on *all*).
+        """
+        if self.opts.pages_mode == code:
+            return
+        self.opts.pages_mode = code
+        try:
+            self.query_one(f"#pm-{code}", RadioButton).value = True
+        except Exception:  # noqa: BLE001 — during teardown / not mounted
+            pass
+
     def _sync_packaging_enabled(self) -> None:
         allowed = tui_state.allowed_packagings(self.opts.content_format)
         for code in engine._PACKAGING_ORDER:
@@ -533,7 +567,40 @@ class ExportWizardApp(App):
             except Exception:  # noqa: BLE001
                 pass
 
+    def _resolved_name(self) -> str:
+        """Output name actually used: the field, or ``{stem}_estratto``."""
+        return self.opts.name.strip() or tui_state.default_name(self.opts)
+
+    def _apply_name_default(self) -> None:
+        """Keep the *Name* field following the chosen PDF until edited by hand."""
+        if self._name_touched:
+            return
+        try:
+            field = self.query_one("#in-name", Input)
+        except Exception:  # noqa: BLE001 — not mounted
+            return
+        default = tui_state.default_name(self.opts)
+        if field.value != default:
+            self.opts.name = ""
+            self._last_name_value = default
+            field.value = default
+
+    def _refresh_destbar(self) -> None:
+        """Update the always-visible destination bar (folder + name)."""
+        try:
+            bar = self.query_one("#destbar", Static)
+        except Exception:  # noqa: BLE001 — during teardown
+            return
+        if not self.opts.pdf:
+            bar.update(ti.T("tui.destbar.none"))
+            bar.add_class("-unset")
+            return
+        bar.remove_class("-unset")
+        folder = self.opts.out_folder.strip() or str(tui_state.default_folder())
+        bar.update(ti.T("tui.destbar", folder=folder, name=self._resolved_name()))
+
     def _refresh_pages_preview(self) -> None:
+        self._refresh_destbar()
         if not self.opts.pdf:
             self._page_count = None
         elif self._page_count is None:
@@ -552,6 +619,7 @@ class ExportWizardApp(App):
                            label=format_pages_label(pages)))
 
     def _refresh_output_preview(self) -> None:
+        self._refresh_destbar()
         if not self.opts.pdf:
             self.query_one("#out-preview", Static).update("")
             return
@@ -633,20 +701,33 @@ class ExportWizardApp(App):
         if ident == "in-pdf":
             self.opts.pdf = value.strip()
             self._page_count = None
+            self._apply_name_default()
             self._refresh_pages_preview()
         elif ident == "in-from":
-            self.opts.range_from = _int_or(value, self.opts.range_from)
+            new = _int_or(value, self.opts.range_from)
+            if new != self.opts.range_from:
+                self.opts.range_from = new
+                self._set_pages_mode("range")
             self._refresh_pages_preview()
         elif ident == "in-to":
-            self.opts.range_to = _int_or(value, self.opts.range_to)
+            new = _int_or(value, self.opts.range_to)
+            if new != self.opts.range_to:
+                self.opts.range_to = new
+                self._set_pages_mode("range")
             self._refresh_pages_preview()
         elif ident == "in-free":
-            self.opts.free_pages = value or "all"
+            new = value or "all"
+            if new != self.opts.free_pages:
+                self.opts.free_pages = new
+                self._set_pages_mode("free")
             self._refresh_pages_preview()
         elif ident == "in-folder":
             self.opts.out_folder = value.strip()
             self._refresh_output_preview()
         elif ident == "in-name":
+            if value != self._last_name_value:
+                self._name_touched = True
+            self._last_name_value = value
             self.opts.name = value.strip()
             self._refresh_output_preview()
         elif ident == "in-ocr":
@@ -697,6 +778,7 @@ class ExportWizardApp(App):
             self.query_one("#in-pdf", Input).value = str(path)
         except Exception:  # noqa: BLE001
             pass
+        self._apply_name_default()
         self._refresh_pages_preview()
 
     def _pick_folder(self) -> None:

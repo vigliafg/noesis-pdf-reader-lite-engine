@@ -49,4 +49,13 @@ Non aggirarlo: è il contratto "stesso engine".
   parte da "translated".
 - Comandi utili: `python cli.py --help`, `python -m unittest discover -s tests`,
   `python tools/sync_from_desktop.py`.
+- La TUI (`-gui`, moduli `tui*.py`, **non** verbatim) ha una suite end-to-end
+  che pilota l'app Textual reale e verifica i file esportati: harness
+  `tests/tui_e2e.py`, scenari `tests/test_tui_e2e.py`
+  (`python -m unittest tests.test_tui_e2e -v`). Gira offline e si salta senza
+  l'extra `tui`.
 - CI headless (senza Qt) in `.github/workflows/tests.yml`.
+- Release multipiattaforma in `.github/workflows/release.yml` (tag `v*`):
+  Windows `.exe` + installer NSIS, Linux AppImage, macOS `.dmg`; versioni
+  allineate al desktop (`v0.30.0`). Aggiorna il README → Release quando cambi
+  gli asset.

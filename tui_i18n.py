@@ -114,6 +114,12 @@ _STRINGS: dict[str, dict[str, str]] = {
     "tui.run.summary": {
         "it": "{ok} pagine ok · {errors} errori",
         "en": "{ok} pages ok · {errors} errors"},
+    "tui.destbar": {
+        "it": "Destinazione: {folder}  ·  {name}",
+        "en": "Destination: {folder}  ·  {name}"},
+    "tui.destbar.none": {
+        "it": "Destinazione: scegli un PDF per iniziare",
+        "en": "Destination: choose a PDF to begin"},
     "tui.summary.planned": {
         "it": "File che verranno creati", "en": "Files that will be created"},
     "tui.summary.nofiles": {
